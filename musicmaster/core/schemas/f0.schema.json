@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://singer.dev/schemas/f0.schema.json",
+  "title": "M3 f0 (逐帧基频)",
+  "description": "M3 音高分析输出。f0_hz 与 voiced 必须等长(逐帧)。清音/无声帧 f0_hz=0、voiced=0。对应 §3 契约: wav(mono) -> f0.json",
+  "type": "object",
+  "required": ["hop_ms", "sr", "f0_hz", "voiced"],
+  "additionalProperties": false,
+  "properties": {
+    "hop_ms": { "type": "number", "exclusiveMinimum": 0, "description": "帧移(毫秒)" },
+    "sr": { "type": "integer", "exclusiveMinimum": 0, "description": "采样率(Hz)" },
+    "f0_hz": {
+      "type": "array",
+      "items": { "type": "number", "minimum": 0 },
+      "description": "逐帧基频(Hz);清音/无声帧为 0"
+    },
+    "voiced": {
+      "type": "array",
+      "items": { "type": "integer", "enum": [0, 1] },
+      "description": "逐帧清浊判定:1=浊音(有基频),0=清音/静音"
+    },
+    "detector": {
+      "type": "string",
+      "description": "可选:f0 检测器标识(pyin|crepe|rmvpe),便于追溯产物来源"
+    }
+  }
+}

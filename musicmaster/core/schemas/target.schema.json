@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://singer.dev/schemas/target.schema.json",
+  "title": "M4a/M4b 目标旋律(音符列表)",
+  "description": "标准化目标旋律。M4a(谱解析)与 M4b(扒谱)输出同一契约,供 M5 对齐消费。对应 §3 契约: midi|musicxml|wav -> target.json / notes.json",
+  "type": "object",
+  "required": ["tempo", "notes"],
+  "additionalProperties": false,
+  "properties": {
+    "tempo": { "type": "number", "exclusiveMinimum": 0, "description": "速度(BPM)" },
+    "notes": {
+      "type": "array",
+      "description": "按时间排列的音符;end_s 必须 > start_s",
+      "items": {
+        "type": "object",
+        "required": ["midi", "start_s", "end_s"],
+        "additionalProperties": false,
+        "properties": {
+          "midi": { "type": "integer", "minimum": 0, "maximum": 127, "description": "MIDI 音高(0-127)" },
+          "start_s": { "type": "number", "minimum": 0, "description": "起始时间(秒)" },
+          "end_s": { "type": "number", "exclusiveMinimum": 0, "description": "结束时间(秒),需 > start_s" }
+        }
+      }
+    }
+  }
+}
