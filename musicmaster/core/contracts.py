@@ -7,12 +7,15 @@ from __future__ import annotations
 from typing import List, TypedDict
 
 
-class F0(TypedDict, total=False):
-    """M3 输出:f0.schema.json"""
+class _F0Required(TypedDict):
     hop_ms: float
     sr: int
     f0_hz: List[float]
     voiced: List[int]
+
+
+class F0(_F0Required, total=False):
+    """M3 输出:f0.schema.json(hop_ms/sr/f0_hz/voiced 必填,detector 可选)"""
     detector: str  # 可选
 
 

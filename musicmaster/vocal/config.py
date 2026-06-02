@@ -79,6 +79,12 @@ def check_paths(kind: str) -> list[str]:
             problems.append(
                 f"未找到修音 venv 的 python(缺 {py})。设 MUSICMASTER_VOCAL_PYTHON 指向 .venv-neural 的 python。"
             )
+        for _w in ("ckpts/world_fixed_40.pt", "ckpts/bigvgan_24khz_100band/g_05000000.pt"):
+            if not (dp / _w).is_file():
+                problems.append(
+                    f"未找到 DiffPitcher 权重(缺 {dp / _w})。请把 ckpts 放到 {dp}/ckpts/"
+                    f"(见 scripts/setup_vocal.py 的「权重」提示),否则修音会在子进程崩在 torch.load。"
+                )
     elif kind == "voice":
         sv = seedvc_dir()
         py = svc_python()

@@ -41,10 +41,13 @@ _CFG = _load()
 
 
 def resolve(json_key: str, env: str | None = None, default=None):
-    """按优先级返回路径字符串:环境变量 > paths.local.json[json_key] > default。"""
-    if env and os.environ.get(env):
-        return os.environ[env]
+    """按优先级返回路径字符串:环境变量 > paths.local.json[json_key] > default。
+    空串/纯空白一律视为「未设置」并回退(避免空/垃圾路径被当真值返回)。"""
+    if env:
+        ev = os.environ.get(env)
+        if ev and ev.strip():
+            return ev
     v = _CFG.get(json_key)
-    if v:
+    if isinstance(v, str) and v.strip():
         return v
     return default

@@ -14,6 +14,10 @@ M4b 转录(transcribe / transcribe_to_files)已落地(TASK-003;人声 pyin+音�
 M8 渲染(render)已落地(TASK-004;五线谱 Verovio/LGPL 作为库,
 简谱 jianpu-ly/Apache 生成 .ly + LilyPond CLI 独立子进程渲染)。
 """
+# ⚠️ 同名陷阱:下面把 render/transcribe/separate/correct 等【函数】绑成了本包属性。
+#    因此 `from musicmaster.core import render` 拿到的是【函数】,再 `render.render(...)` 会 AttributeError。
+#    要拿【子模块】请用 `importlib.import_module("musicmaster.core.render")` 或 `from musicmaster.core.render import render`。
+#    (合并日志 Entry#11 曾因此崩过一次。)
 from .contracts import F0, Note, Target, TargetF0Frames, CorrectParams
 from .correct import correct
 from .transcribe import (

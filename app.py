@@ -105,8 +105,10 @@ def do_transcribe(audio, engine, key):
         argv = [str(audio), "--out", str(d), "--engine", engine]
         if key and key.strip():
             argv += ["--key", key.strip()]
-        autopilot.main(argv)
+        rc = autopilot.main(argv)
         report = (d / "报告.md").read_text(encoding="utf-8") if (d / "报告.md").is_file() else "(无报告)"
+        if rc != 0:
+            report = f"> 扒谱以非零码({rc})结束,可能转录失败,详见下方报告。\n\n" + report
         staff = d / "staff.svg"
         downloads = [str(p) for p in (d / "notes.json", d / "out.mid", d / "out.musicxml",
                                        d / "jianpu.pdf", d / "confidence.json") if p.is_file()]
