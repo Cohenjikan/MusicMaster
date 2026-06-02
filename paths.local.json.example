@@ -1,0 +1,8 @@
+{
+  "_comment": "复制为 paths.local.json,改成你机器上的实际路径(用正斜杠 /)。也可改用环境变量 MUSICMASTER_SEP_PYTHON / MUSICMASTER_DIFFPITCHER_DIR / MUSICMASTER_VOCAL_PYTHON / MUSICMASTER_SEEDVC_DIR / MUSICMASTER_SVC_PYTHON。用 scripts/setup_sep.py 与 setup_vocal.py 可自动建好这些 venv 并打印路径。",
+  "sep_python": "C:/path/to/.venv-sep/Scripts/python.exe",
+  "diffpitcher_dir": "C:/path/to/DiffPitcher",
+  "vocal_python": "C:/path/to/.venv-neural/Scripts/python.exe",
+  "seedvc_dir": "C:/path/to/seed-vc",
+  "svc_python": "C:/path/to/.venv-svc/Scripts/python.exe"
+}

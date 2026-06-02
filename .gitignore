@@ -60,6 +60,10 @@ _scratch/
 *.log
 gradio_cached_examples/
 
+# ═══════════════ 机器相关路径配置(不入库;用 paths.local.json.example 当模板) ═══════════════
+paths.local.json
+start_gui.log
+
 # ═══════════════ OS / IDE ═══════════════
 .DS_Store
 Thumbs.db

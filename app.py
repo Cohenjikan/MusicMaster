@@ -55,8 +55,9 @@ def _subprocess_env() -> dict:
 
 
 def _sep_python() -> str | None:
-    """分离 venv(.venv-sep)的 python;环境变量优先,否则常见默认。"""
-    p = os.environ.get("MUSICMASTER_SEP_PYTHON")
+    """分离 venv(.venv-sep)的 python;优先级:环境变量 > paths.local.json > vendor 默认。"""
+    from musicmaster import _paths
+    p = _paths.resolve("sep_python", "MUSICMASTER_SEP_PYTHON", None)
     if p and Path(p).is_file():
         return p
     for cand in (REPO / "vendor" / ".venv-sep" / "Scripts" / "python.exe",

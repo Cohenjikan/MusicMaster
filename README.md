@@ -92,13 +92,18 @@ python scripts/setup_vocal.py
 ```
 
 脚本会在 `vendor/` 下拉取 DiffPitcher / Seed-VC 源码、建对应 venv、下载权重。完成后,
-GUI / CLI 通过环境变量找到它们(脚本会打印,可写进你的 shell 配置):
+把各路径告诉 GUI/CLI 有两种方式(优先级:**环境变量 > `paths.local.json`**):
 
-| 环境变量 | 指向 |
+- **方式一(推荐):配置文件** —— 复制 `paths.local.json.example` 为 `paths.local.json`,填上各路径(用正斜杠 `/`)。该文件不入库,GUI/CLI 启动时自动读取,无需每次设环境变量。
+- **方式二:环境变量** —— 设下表变量(`setup_*.py` 会打印)。
+
+| paths.local.json 键 / 环境变量 | 指向 |
 |---|---|
-| `MUSICMASTER_SEP_PYTHON` | 分离 venv 的 python(.venv-sep) |
-| `MUSICMASTER_DIFFPITCHER_DIR` / `MUSICMASTER_VOCAL_PYTHON` | DiffPitcher 目录 / 修音 venv 的 python |
-| `MUSICMASTER_SEEDVC_DIR` / `MUSICMASTER_SVC_PYTHON` | Seed-VC 目录 / 换音色 venv 的 python |
+| `sep_python` / `MUSICMASTER_SEP_PYTHON` | 分离 venv 的 python(.venv-sep) |
+| `diffpitcher_dir` / `MUSICMASTER_DIFFPITCHER_DIR` | DiffPitcher 目录(含 run_qt4 + ckpts) |
+| `vocal_python` / `MUSICMASTER_VOCAL_PYTHON` | 修音 venv 的 python(.venv-neural) |
+| `seedvc_dir` / `MUSICMASTER_SEEDVC_DIR` | Seed-VC 目录(含 inference.py) |
+| `svc_python` / `MUSICMASTER_SVC_PYTHON` | 换音色 venv 的 python(.venv-svc) |
 | `MUSICMASTER_SEP_MODELS` | (可选)分离模型缓存目录 |
 
 **修音换音色的输入**(三个):① 你的原始清唱 ② 目标旋律的**去和声**干净参考(可用「分离」页从原曲分出)③ 你自己的一段干净清唱(作音色锚)。

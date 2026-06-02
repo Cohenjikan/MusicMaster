@@ -19,6 +19,8 @@ import os
 import sys
 from pathlib import Path
 
+from .. import _paths
+
 # musicmaster 仓库根(本文件在 <repo>/musicmaster/vocal/config.py)
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -31,24 +33,24 @@ def _python_under(venv_dir: Path) -> Path:
 
 
 def diffpitcher_dir() -> Path:
-    d = os.environ.get("MUSICMASTER_DIFFPITCHER_DIR")
-    return Path(d) if d else (_REPO_ROOT / "vendor" / "DiffPitcher")
+    return Path(_paths.resolve("diffpitcher_dir", "MUSICMASTER_DIFFPITCHER_DIR",
+                               str(_REPO_ROOT / "vendor" / "DiffPitcher")))
 
 
 def vocal_python() -> Path:
-    p = os.environ.get("MUSICMASTER_VOCAL_PYTHON")
+    p = _paths.resolve("vocal_python", "MUSICMASTER_VOCAL_PYTHON", None)
     if p:
         return Path(p)
     return _python_under(diffpitcher_dir().parent / ".venv-neural")
 
 
 def seedvc_dir() -> Path:
-    d = os.environ.get("MUSICMASTER_SEEDVC_DIR")
-    return Path(d) if d else (_REPO_ROOT / "vendor" / "seed-vc")
+    return Path(_paths.resolve("seedvc_dir", "MUSICMASTER_SEEDVC_DIR",
+                               str(_REPO_ROOT / "vendor" / "seed-vc")))
 
 
 def svc_python() -> Path:
-    p = os.environ.get("MUSICMASTER_SVC_PYTHON")
+    p = _paths.resolve("svc_python", "MUSICMASTER_SVC_PYTHON", None)
     if p:
         return Path(p)
     return _python_under(seedvc_dir().parent / ".venv-svc")
