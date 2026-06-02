@@ -20,25 +20,36 @@ MusicMaster 把两套管线合到一个项目里:
 
 扒谱与互转是纯 CPU,开箱即用;分离与修音换音色需 GPU(见下文)。
 
+> ⚠️ **不要直接双击 `app.py`** —— 它要在装好依赖的虚拟环境里跑,直接双击会用系统 Python 报 `No module named 'gradio'`。
+> 正确姿势:先建环境(一次),之后**双击 `start_gui.bat`**(Windows)即可。
+
 ```bash
 git clone <your-repo-url> musicmaster && cd musicmaster
 
-# 1) 建主环境(CPU)
-python -m venv .venv
-.venv\Scripts\activate                      # Windows
-# source .venv/bin/activate                 # macOS/Linux
+# 1) 一键建主环境(CPU):建 .venv + 装 TensorFlow + crepe(--no-deps) + 其余依赖 + 本包
+python scripts/setup_core.py
 
-# 2) 装依赖(CREPE 建议 --no-deps 以免降级 TensorFlow)
-pip install tensorflow>=2.15,<2.16
-pip install --no-deps crepe
-pip install -r requirements-core.txt
-pip install -e .                            # 安装 musicmaster 包
-
-# 3) 启动 GUI
-python app.py                               # 浏览器开 http://127.0.0.1:7860
+# 2) 启动 GUI
+start_gui.bat            # Windows:双击它,或命令行运行
+# ./start_gui.sh         # macOS/Linux
 ```
 
-GUI 四个标签页对应四大能力;**互转 / 扒谱**两页此刻即可用。
+启动后浏览器开 `http://127.0.0.1:7860`,四个标签页对应四大能力;**互转 / 扒谱(crepe)**两页此刻即可用。
+
+<details><summary>手动建环境(等价于 setup_core.py)</summary>
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate                      # Windows;macOS/Linux: source .venv/bin/activate
+pip install tensorflow>=2.15,<2.16
+pip install --no-deps crepe                 # 避免 crepe 降级 TensorFlow
+pip install -r requirements-core.txt
+pip install -e .
+python app.py
+```
+</details>
+
+> 引擎说明:GUI 扒谱默认 **crepe**(人声/单旋律最佳,纯 CPU)。`basic-pitch`(复音)需 **TensorFlow 2.15** 干净环境;`bytedance`(钢琴)需 GPU —— 用 `setup_core.py` 建的干净环境即含 TF 2.15,这两个引擎可用。
 
 > **简谱出图(jianpu.pdf)** 需额外装 [LilyPond](https://lilypond.org)(GPL,仅作独立子进程):
 > 装好后设环境变量 `LILYPOND_EXE` 指向 `lilypond.exe` 全路径(**不要**把它的 bin 放进全局 PATH,其 DLL 会和 librosa/TF 冲突)。

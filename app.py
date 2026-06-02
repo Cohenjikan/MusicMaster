@@ -111,8 +111,11 @@ def do_transcribe(audio, engine, key):
                                        d / "jianpu.pdf", d / "confidence.json") if p.is_file()]
         return report, _svg_html(staff), downloads, None
     except Exception as e:
-        import traceback
-        return f"❌ 扒谱失败:{type(e).__name__}: {e}\n\n{traceback.format_exc()[-800:]}", "", None, None
+        hint = ""
+        if engine in ("basic-pitch", "bytedance"):
+            hint = (f"\n\n💡 引擎「{engine}」需专用环境(basic-pitch 需 TensorFlow 2.15 干净环境;"
+                    f"bytedance 需 GPU)。快速上手请用默认引擎 **crepe**(人声/单旋律最佳)。详见 README。")
+        return f"❌ 扒谱失败:{type(e).__name__}: {str(e)[:240]}{hint}", "", None, None
 
 
 # ─────────────────────────────── 分离 ─────────────────────────────── #
