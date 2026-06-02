@@ -1,45 +1,19 @@
-"""Chunked FULL-SONG runner for the validated DiffPitcher pitch-correction pipeline.
+"""分块全曲修音(CLI)—— 包装验证过的 run_qt4.template_pitcher,处理任意长度。
 
-Does NOT modify run_qt4.py -- it imports the validated recipe from it:
-  template_pitcher(source, pitch_ref, model, hifigan, steps, shift_semi, eta, clean)
-  load_models(), sr (==24000).
+不改 run_qt4。策略:验证配方是 30s 量级操作(8GB 显存),所以把整段切成
+重叠 30s 窗,逐窗跑 template_pitcher(原样),再 raised-cosine 交叉淡入拼回完整时间线。
+≤一个窗(≤30s)时即单窗 = 等价单次 run_qt4。
 
-Strategy (long audio on an 8GB GPU): the validated recipe is a 30s-scale operation
-(get_world_mel / torchcrepe / fastdtw / 100-step diffusion).  We therefore window the
-full ~270s song into overlapping 30s windows, run template_pitcher UNCHANGED on each
-window (writing per-window temp src/ref wavs so the file-path API is reused verbatim),
-then CROSSFADE-CONCATENATE the per-window outputs back onto one full timeline.
-
-Windowing:
-  window_len = 30.0 s, overlap = 5.0 s, hop = 25.0 s.
-  Window starts at 0, 25, 50, ...; the LAST window's end is clamped to the audio end
-  (so the last window may be shorter than 30s, which template_pitcher handles fine).
-
-Crossfade stitch:
-  Window i is placed at sample round(t0_i * sr) on the output timeline.  Where window i
-  and window i+1 overlap (a 5s region), a raised-cosine (Hann-based) equal-power-ish
-  crossfade fades window i OUT while fading window i+1 IN -> no hard seams.  Each
-  per-window output may be a few ms longer than its input slice (mel %8 padding); we
-  anchor by the INTENDED start sample and let the 5s crossfade absorb the small length
-  difference, trimming any tail that runs past the next window's region / the timeline.
-
-Seam check:
-  After stitching, for every window boundary we report RMS(dB) just-before vs just-after
-  the boundary sample; a working crossfade should show no >10 dB jump.
-
-Outputs:
-  C:/Users/Cohen/Desktop/singer/shared/samples/out/修音全曲_s100.wav   (stitched, 24k)
-  C:/Users/Cohen/Desktop/singer/shared/samples/out/我的清唱_全曲.wav     (src copy, 24k, A/B)
+用法(cwd 必须在 DiffPitcher,且 PYTHONPATH 含 DiffPitcher,以便 import run_qt4 + 读 ckpts):
+  python run_full.py --source S --ref R --out O [--steps 150] [--shift -12] [--eta 0] [--no-clean]
+                     [--window 30] [--overlap 5]
 """
+import argparse
 import os
 import sys
-import time
 import tempfile
+import time
 
-# Force UTF-8 stdout/stderr. run_qt4._cents_diag prints librosa.hz_to_note(...) which
-# can contain the SHARP sign U+266F (e.g. "C#4"); under a piped Windows console Python
-# defaults stdout to the GBK codepage and raises UnicodeEncodeError on that glyph.
-# This does NOT touch run_qt4.py -- it only changes how THIS process encodes its stdout.
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
@@ -50,204 +24,96 @@ import numpy as np
 import soundfile as sf
 import librosa
 
-# import the VALIDATED recipe (do not touch run_qt4.py)
+# 验证配方(勿改 run_qt4);本脚本与 run_qt4.py 同目录,import 同目录那份
 from run_qt4 import template_pitcher, load_models, sr
-
-# ---- paths ----
-SRC_FULL = r"C:\Users\Cohen\Desktop\singer\neural\work\src_full.wav"
-REF_FULL = r"C:\Users\Cohen\Desktop\singer\neural\work\ref_full.wav"
-OUT_DIR = r"C:\Users\Cohen\Desktop\singer\shared\samples\out"
-# STEPS overridable via argv[1] (default 100); output auto-named by step count
-STEPS = int(sys.argv[1]) if len(sys.argv) > 1 else 100
-OUT_FULL = os.path.join(OUT_DIR, f"修音全曲_s{STEPS}.wav")
-OUT_SRC_COPY = os.path.join(OUT_DIR, "我的清唱_全曲.wav")
-
-# ---- recipe knobs (validated) ----
-SHIFT_SEMI = -12
-ETA = 0
-CLEAN = True
-
-# ---- windowing ----
-WINDOW_LEN = 30.0   # s
-OVERLAP = 5.0       # s
-HOP = WINDOW_LEN - OVERLAP  # 25.0 s
-
-
-def rms_db(x):
-    x = np.asarray(x, dtype=np.float64)
-    if x.size == 0:
-        return -120.0
-    return 10.0 * np.log10(np.mean(x ** 2) + 1e-12)
 
 
 def main():
-    os.makedirs(OUT_DIR, exist_ok=True)
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--source", required=True)
+    ap.add_argument("--ref", required=True)
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--steps", type=int, default=150)
+    ap.add_argument("--shift", type=int, default=-12)
+    ap.add_argument("--eta", type=float, default=0.0)
+    ap.add_argument("--no-clean", dest="clean", action="store_false")
+    ap.set_defaults(clean=True)
+    ap.add_argument("--window", type=float, default=30.0)
+    ap.add_argument("--overlap", type=float, default=5.0)
+    a = ap.parse_args()
 
-    src_full, sr_s = sf.read(SRC_FULL)
-    ref_full, sr_r = sf.read(REF_FULL)
-    assert sr_s == sr and sr_r == sr, f"sr mismatch: src={sr_s} ref={sr_r} expected={sr}"
-    if src_full.ndim > 1:
-        src_full = src_full.mean(1)
-    if ref_full.ndim > 1:
-        ref_full = ref_full.mean(1)
-    src_full = src_full.astype(np.float32)
-    ref_full = ref_full.astype(np.float32)
+    WIN, OV = a.window, a.overlap
+    HOP = WIN - OV
 
-    # they are time-aligned (start at t=0); use the common length
-    n_common = min(len(src_full), len(ref_full))
-    src_full = src_full[:n_common]
-    ref_full = ref_full[:n_common]
-    total_dur = n_common / sr
-    print(f"[run_full] src_full={len(src_full)} ref_full(common)={n_common} "
-          f"dur={total_dur:.3f}s  steps={STEPS} shift={SHIFT_SEMI} eta={ETA} clean={CLEAN}")
-
-    # build window start times: 0, 25, 50, ... while start < total_dur
+    # 任意格式/采样率/长度 → 24k 单声道;两者裁到等长(time-aligned)
+    src, _ = librosa.load(a.source, sr=sr, mono=True)
+    ref, _ = librosa.load(a.ref, sr=sr, mono=True)
+    n = min(len(src), len(ref))
+    src, ref = src[:n].astype(np.float32), ref[:n].astype(np.float32)
+    total = n / sr
     starts = []
     t = 0.0
-    while t < total_dur - 1e-6:
+    while t < total - 1e-6:
         starts.append(t)
         t += HOP
-    # if only one window would be created but audio > window_len, the while still covers it
+    if not starts:
+        starts = [0.0]
     n_win = len(starts)
-    print(f"[run_full] windows: N={n_win}  window_len={WINDOW_LEN}s overlap={OVERLAP}s hop={HOP}s")
+    print(f"[run_full] dur={total:.2f}s  windows={n_win}  win={WIN}s overlap={OV}s "
+          f"steps={a.steps} shift={a.shift} eta={a.eta} clean={a.clean}", flush=True)
 
     model, hifigan = load_models()
-    print("[run_full] models loaded")
+    tmp = tempfile.mkdtemp(prefix="diffpitch_win_")
+    sp, rp = os.path.join(tmp, "s.wav"), os.path.join(tmp, "r.wav")
 
-    tmpdir = tempfile.mkdtemp(prefix="diffpitch_win_")
-    src_win_path = os.path.join(tmpdir, "src_win.wav")
-    ref_win_path = os.path.join(tmpdir, "ref_win.wav")
-
-    win_outs = []          # per-window float32 output arrays (@24k)
-    win_start_samp = []    # intended placement sample on the output timeline
-    per_win_secs = []
-
-    total_diff_t0 = time.time()
+    win_outs, win_start = [], []
+    t0all = time.time()
     for i, t0 in enumerate(starts):
         s0 = int(round(t0 * sr))
-        s1 = min(int(round((t0 + WINDOW_LEN) * sr)), n_common)  # clamp last window
-        src_slice = src_full[s0:s1]
-        ref_slice = ref_full[s0:s1]
-        slice_dur = (s1 - s0) / sr
+        s1 = min(int(round((t0 + WIN) * sr)), n)
+        sf.write(sp, src[s0:s1], sr)
+        sf.write(rp, ref[s0:s1], sr)
+        o = template_pitcher(sp, rp, model, hifigan,
+                             steps=a.steps, shift_semi=a.shift, eta=a.eta, clean=a.clean)
+        o = np.asarray(o, dtype=np.float32).reshape(-1)
+        win_outs.append(o)
+        win_start.append(s0)
+        print(f"[win {i + 1}/{n_win}] t0={t0:.2f}s out_samp={o.size}", flush=True)
+    print(f"[run_full] diffusion total={time.time() - t0all:.1f}s", flush=True)
 
-        sf.write(src_win_path, src_slice, sr)
-        sf.write(ref_win_path, ref_slice, sr)
-
-        w_t0 = time.time()
-        out_win = template_pitcher(src_win_path, ref_win_path, model, hifigan,
-                                   steps=STEPS, shift_semi=SHIFT_SEMI, eta=ETA, clean=CLEAN)
-        w_dt = time.time() - w_t0
-        out_win = np.asarray(out_win, dtype=np.float32).reshape(-1)
-        peak = float(np.max(np.abs(out_win))) if out_win.size else 0.0
-
-        win_outs.append(out_win)
-        win_start_samp.append(s0)
-        per_win_secs.append(w_dt)
-        print(f"[win {i+1}/{n_win}] t0={t0:7.2f}s slice={slice_dur:5.2f}s "
-              f"in_samp={s1-s0} out_samp={out_win.size} peak={peak:.4f} "
-              f"runtime={w_dt:.1f}s", flush=True)
-
-    total_diff_dt = time.time() - total_diff_t0
-    print(f"[run_full] TOTAL diffusion time over {n_win} windows = {total_diff_dt:.1f}s "
-          f"({total_diff_dt/60:.2f} min)")
-
-    # ---- crossfade-concatenate ----
-    ov = int(round(OVERLAP * sr))  # overlap length in samples
-    # raised-cosine (Hann half) fade curves of length ov
-    # fade_in goes 0->1, fade_out goes 1->0; sin^2 / cos^2 pair = constant-power-ish
+    # raised-cosine 交叉淡入拼接
+    ov = int(round(OV * sr))
     ramp = np.arange(ov, dtype=np.float64) / max(ov - 1, 1)
-    fade_in = np.sin(0.5 * np.pi * ramp) ** 2     # 0 -> 1, raised cosine
-    fade_out = 1.0 - fade_in                       # 1 -> 0
-
-    # output timeline length: last window placement + its length, but cap near total_dur
-    timeline_len = win_start_samp[-1] + len(win_outs[-1])
-    out = np.zeros(timeline_len, dtype=np.float64)
-    written_upto = 0  # exclusive sample index already finalized in `out`
-
-    boundary_samples = []  # boundary == start sample of window i (i>=1) on timeline
-
-    for i, (out_win, s0) in enumerate(zip(win_outs, win_start_samp)):
-        w = out_win.astype(np.float64)
+    fade_in = np.sin(0.5 * np.pi * ramp) ** 2
+    fade_out = 1.0 - fade_in
+    # 时间线长度 = 所有窗的最远延伸(短输入时第一窗可能比最后一窗更靠后,故用 max 不能只看最后一窗)
+    timeline = max(s + len(w) for w, s in zip(win_outs, win_start))
+    out = np.zeros(timeline, dtype=np.float64)
+    written = 0
+    for i, (w, s0) in enumerate(zip(win_outs, win_start)):
+        w = w.astype(np.float64)
         if i == 0:
             out[s0:s0 + len(w)] = w
-            written_upto = s0 + len(w)
+            written = s0 + len(w)
             continue
-
-        boundary_samples.append(s0)
-        # crossfade region is [s0, s0+ov) overlapping the previous window's tail.
-        xf_len = min(ov, len(w), max(0, written_upto - s0))
-        if xf_len <= 0:
-            # no overlap available (shouldn't happen with these params) -> butt-join
+        xf = min(ov, len(w), max(0, written - s0))
+        if xf <= 0:
             out[s0:s0 + len(w)] = w
-            written_upto = max(written_upto, s0 + len(w))
+            written = max(written, s0 + len(w))
             continue
-
-        fi = fade_in[:xf_len]
-        fo = fade_out[:xf_len]
-        # existing (previous-window) content in the crossfade region
-        prev_region = out[s0:s0 + xf_len].copy()
-        new_region = w[:xf_len]
-        out[s0:s0 + xf_len] = prev_region * fo + new_region * fi
-        # the remainder of this window goes straight in after the crossfade region
-        rest = w[xf_len:]
-        rs = s0 + xf_len
+        out[s0:s0 + xf] = out[s0:s0 + xf] * fade_out[:xf] + w[:xf] * fade_in[:xf]
+        rest = w[xf:]
+        rs = s0 + xf
         out[rs:rs + len(rest)] = rest
-        written_upto = max(written_upto, rs + len(rest))
+        written = max(written, rs + len(rest))
+    out = np.clip(out[:written], -1.0, 1.0).astype(np.float32)
 
-    out = out[:written_upto]
-
-    # ---- clamp to avoid clipping ----
-    out = np.clip(out, -1.0, 1.0).astype(np.float32)
-
-    # ---- write stitched result ----
-    sf.write(OUT_FULL, out, sr)
+    os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
+    sf.write(a.out, out, sr)
     dur = len(out) / sr
     peak = float(np.max(np.abs(out))) if out.size else 0.0
-    rms = float(np.sqrt(np.mean(out.astype(np.float64) ** 2))) if out.size else 0.0
-    print(f"[run_full] wrote {OUT_FULL}  dur={dur:.3f}s  peak={peak:.5f}  rms={rms:.5f}")
-
-    # ---- assertions ----
-    chk, chk_sr = sf.read(OUT_FULL)
-    chk_dur = len(chk) / chk_sr
-    chk_peak = float(np.max(np.abs(chk))) if chk.size else 0.0
-    assert chk_sr == sr, f"sr assertion failed: {chk_sr}"
-    assert chk_peak > 0.01, f"peak (non-silent) assertion failed: {chk_peak}"
-    assert 250.0 <= chk_dur <= 290.0, f"duration ~270s assertion failed: {chk_dur}"
-    print(f"[verify] reload dur={chk_dur:.3f}s peak={chk_peak:.5f} sr={chk_sr}  OK (~270s, non-silent)")
-
-    # ---- SEAM CHECK: RMS(dB) just-before vs just-after each window boundary ----
-    probe = int(round(0.050 * sr))  # 50ms probe windows on each side
-    print(f"[seam] per-boundary RMS(dB) before|after (probe={probe} samp / 50ms); "
-          f"flag = |delta|>10 dB")
-    max_jump = 0.0
-    worst = None
-    for k, b in enumerate(boundary_samples):
-        a0 = max(0, b - probe)
-        before = out[a0:b]
-        after = out[b:b + probe]
-        rb = rms_db(before)
-        ra = rms_db(after)
-        d = abs(ra - rb)
-        flag = "  <-- >10dB JUMP" if d > 10.0 else ""
-        if d > max_jump:
-            max_jump = d
-            worst = (k + 1, b / sr, rb, ra, d)
-        print(f"[seam] boundary {k+1:2d} @ t={b/sr:7.2f}s  before={rb:7.2f}dB  "
-              f"after={ra:7.2f}dB  |delta|={d:5.2f}dB{flag}")
-    if worst is not None:
-        print(f"[seam] WORST boundary: #{worst[0]} @ t={worst[1]:.2f}s "
-              f"before={worst[2]:.2f}dB after={worst[3]:.2f}dB |delta|={worst[4]:.2f}dB")
-    print(f"[seam] max |delta| across all boundaries = {max_jump:.2f} dB  "
-          f"({'ALL CONTINUOUS (<10dB)' if max_jump <= 10.0 else 'SOME >10dB -- CHECK'})")
-
-    # ---- copy src_full for A/B ----
-    src_cp, _ = sf.read(SRC_FULL)
-    if src_cp.ndim > 1:
-        src_cp = src_cp.mean(1)
-    sf.write(OUT_SRC_COPY, src_cp.astype(np.float32), sr)
-    print(f"[run_full] copied src -> {OUT_SRC_COPY}  dur={len(src_cp)/sr:.3f}s")
-
-    print("[run_full] DONE")
+    print(f"[run_full] wrote {a.out}  dur={dur:.2f}s  peak={peak:.4f}  windows={n_win}", flush=True)
+    assert peak > 0.01, f"silent output (peak={peak})"
 
 
 if __name__ == "__main__":
