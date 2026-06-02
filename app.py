@@ -213,6 +213,8 @@ def build() -> gr.Blocks:
             sp_dl = gr.File(label="下载各轨", file_count="multiple")
             sp_btn.click(do_separate, [sp_audio, sp_stages, sp_denoise], [sp_out, sp_dl])
 
+        # ⭐ 三个输入的设计原因(② 决定唱成什么调 / ③ 决定听起来是谁)见
+        #    docs/合并开发日志.md Entry #8 —— 前端重做前必读,别退回两输入。
         with gr.Tab("🎚️ 修音换音色"):
             gr.Markdown(
                 "两段式:**修音准**(DiffPitcher)→ **换音色=本人**(Seed-VC)= 在调 + 干净 + 仍是你。**需 GPU venv**。\n"
