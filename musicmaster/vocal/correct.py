@@ -19,6 +19,34 @@ from . import config
 PathLike = Union[str, Path]
 
 
+SR = 24000
+MAX_SECONDS_DEFAULT = 30.0
+
+
+def _prep_pair(source, ref, max_seconds):
+    """加载 source+ref → 单声道 24k → 裁到等长(修 source/ref 时长不一致导致的 UNet 尺寸崩溃)
+    + 限时长(避 8GB 显存 OOM)。返回 (src_wav, ref_wav, 实际秒数, 是否被截断)。
+    在主(CPU)环境用 librosa/soundfile 完成,顺带把 m4a/mp3 等统一成 wav。"""
+    import tempfile
+
+    import librosa
+    import soundfile as sf
+
+    ys, _ = librosa.load(str(source), sr=SR, mono=True)
+    yr, _ = librosa.load(str(ref), sr=SR, mono=True)
+    n = min(len(ys), len(yr))
+    capped = False
+    if max_seconds and n > int(max_seconds * SR):
+        n = int(max_seconds * SR)
+        capped = True
+    ys, yr = ys[:n], yr[:n]
+    d = Path(tempfile.mkdtemp(prefix="mm_correct_"))
+    sp, rp = d / "src_24k.wav", d / "ref_24k.wav"
+    sf.write(str(sp), ys, SR)
+    sf.write(str(rp), yr, SR)
+    return sp, rp, n / SR, capped
+
+
 def correct(
     source: PathLike,
     ref: PathLike,
@@ -28,6 +56,7 @@ def correct(
     shift: int = -12,
     eta: float = 0.0,
     clean: bool = True,
+    max_seconds: float = MAX_SECONDS_DEFAULT,
     timeout: float = 3600.0,
 ) -> Path:
     """把 `source`(用户原始清唱)的音高修向 `ref`(去和声干净参考)的旋律,写到 `out`(24kHz)。
@@ -58,10 +87,16 @@ def correct(
     out_path = Path(out).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # 鲁棒前处理:统一 24k 单声道 + 裁到等长(修「source/ref 时长不一致」的 UNet 尺寸崩溃)
+    # + 限时长(8GB 显存单次上限;整首请用片段,或走分块 run_full)。
+    src_wav, ref_wav, dur, capped = _prep_pair(source, ref, max_seconds)
+    if capped:
+        print(f"[correct] 输入较长 → 仅处理前 {dur:.0f}s(8GB 显存单次上限;整首请分段或用 run_full 分块)。")
+
     cmd = [
         str(py), "run_qt4.py",
-        "--source", str(Path(source).resolve()),
-        "--ref", str(Path(ref).resolve()),
+        "--source", str(src_wav),
+        "--ref", str(ref_wav),
         "--out", str(out_path),
         "--steps", str(int(steps)),
         "--shift", str(int(shift)),

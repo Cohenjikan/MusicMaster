@@ -70,6 +70,15 @@ def voice(
     out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # 音色锚只需一段样本(过长无益且更慢)→ 若 >30s 截取前 30s。
+    import librosa as _lb
+    import soundfile as _sf
+
+    _ty, _tsr = _lb.load(str(target), sr=None, mono=True)
+    if len(_ty) > 30 * _tsr:
+        target = out_dir / "_target_cap.wav"
+        _sf.write(str(target), _ty[: 30 * _tsr], _tsr)
+
     cmd = [
         str(py), "inference.py",
         "--source", str(Path(source).resolve()),
