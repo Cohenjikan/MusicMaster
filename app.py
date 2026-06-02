@@ -236,4 +236,17 @@ def build() -> gr.Blocks:
 
 
 if __name__ == "__main__":
-    build().launch(server_name=os.environ.get("GRADIO_SERVER_NAME", "127.0.0.1"))
+    # 端口:环境变量优先;否则 None → gradio 自动从 7860 起找空闲端口(避免「端口被占」启动失败)。
+    env_port = os.environ.get("GRADIO_SERVER_PORT")
+    port = int(env_port) if env_port else None
+    print(f"\n========================================\n"
+          f"  MusicMaster 启动中,请稍候(首次加载约 20-40 秒,要载入 TensorFlow)...\n"
+          f"  就绪后浏览器会自动打开;若没弹出,看下方 gradio 打印的\n"
+          f"  'Running on local URL' 地址(通常 http://127.0.0.1:7860,\n"
+          f"   若被占用会自动顺延到 7861 等)。关闭本窗口即停止服务。\n"
+          f"========================================\n", flush=True)
+    build().launch(
+        server_name=os.environ.get("GRADIO_SERVER_NAME", "127.0.0.1"),
+        server_port=port,
+        inbrowser=True,
+    )
