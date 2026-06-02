@@ -9,7 +9,10 @@
 """
 import argparse, json, sys
 from pathlib import Path
-sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 import importlib
 from . import transcribe2
 # musicmaster.core.__init__ 把同名函数绑到了包属性上,普通 import 会拿到函数而非子模块;

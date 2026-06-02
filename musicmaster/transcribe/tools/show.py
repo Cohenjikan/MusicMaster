@@ -4,7 +4,10 @@
 用法: PY show.py notes.json [--key G]"""
 import argparse, json, sys
 from pathlib import Path
-sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 PC=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
 # G大调级数映射:pc -> 简谱符号(相对主音)
 def deg_str(midi, tonic_pc):

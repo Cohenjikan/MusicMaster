@@ -12,8 +12,14 @@
 注:Seed-VC 用它自己锁定版本的 requirements(torch==2.4 等),故与 DiffPitcher 分两个 venv。
 """
 from __future__ import annotations
-import argparse, os, shutil, subprocess, venv
+import argparse, os, shutil, subprocess, sys, venv
 from pathlib import Path
+
+# 系统 Python + GBK 控制台:输出/重定向遇非 GBK 字符会 UnicodeEncodeError,统一切 UTF-8(防御式)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 
 ROOT = Path(__file__).resolve().parents[1]
 VENDOR = ROOT / "vendor"
@@ -73,14 +79,14 @@ def main():
         if req.is_file():
             subprocess.check_call([spy, "-m", "pip", "install", "-r", str(req)])
 
-    print("\n──────── 权重 ────────")
-    print("• DiffPitcher:把 ckpts/ 放到 vendor/DiffPitcher/ckpts/:")
+    print("\n-------- 权重 --------")
+    print("- DiffPitcher:把 ckpts/ 放到 vendor/DiffPitcher/ckpts/:")
     print("    - world_fixed_40.pt")
     print("    - bigvgan_24khz_100band/g_05000000.pt + config.json")
     print("  (来源见 DiffPitcher 仓库 README / HF;MIT)")
-    print("• Seed-VC:首次运行 inference.py 自动从 HuggingFace 下载(Plachta/Seed-VC、campplus、bigvgan_v2 等)。")
+    print("- Seed-VC:首次运行 inference.py 自动从 HuggingFace 下载(Plachta/Seed-VC、campplus、bigvgan_v2 等)。")
 
-    print("\n✅ 完成。设这些环境变量(GUI/CLI 用):")
+    print("\n[OK] 完成。设这些环境变量(GUI/CLI 用):")
     print(f"    MUSICMASTER_DIFFPITCHER_DIR={DP_DIR}")
     print(f"    MUSICMASTER_VOCAL_PYTHON={venv_python(VENDOR / '.venv-neural')}")
     print(f"    MUSICMASTER_SEEDVC_DIR={SVC_DIR}")

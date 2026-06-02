@@ -9,7 +9,10 @@
 from __future__ import annotations
 import argparse, json, shutil, subprocess, sys
 from pathlib import Path
-sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 import numpy as np
 import librosa
 
@@ -73,9 +76,15 @@ def dynamic_range_db(y: np.ndarray, sr: int) -> float:
 
 def assess(path: str) -> dict:
     meta = ffprobe_meta(path)
-    y, sr = librosa.load(path, sr=None, mono=True)
+    try:
+        y, sr = librosa.load(path, sr=None, mono=True)
+    except Exception as e:
+        return {"tier": "太差", "gate": "block", "score": 0.0,
+                "issues": [["严重", f"读取失败/非音频文件({type(e).__name__})", "确认是有效音频文件(wav/mp3/...)后重试"]],
+                "metrics": {}, "meta": meta}
     if y.size == 0:
-        return {"tier": "太差", "gate": "block", "issues": [["严重", "空音频/读取失败", "换文件"]],
+        return {"tier": "太差", "gate": "block", "score": 0.0,
+                "issues": [["严重", "空音频/读取失败", "换文件"]],
                 "metrics": {}, "meta": meta}
     roll, _peak = effective_bandwidth(y, sr)
     eff_sr = 2.0 * roll

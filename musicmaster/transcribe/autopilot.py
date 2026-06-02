@@ -14,7 +14,10 @@
 from __future__ import annotations
 import argparse, importlib, json, sys
 from pathlib import Path
-sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 
 from . import quality as quality_gate
 from . import confidence
@@ -56,61 +59,94 @@ def main(argv=None):
     is_mono = engine == "crepe"
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
     rep = ["# 一键扒谱报告(autopilot)\n", f"> 源:`{Path(a.input).name}`  引擎:`{engine}`\n"]
-
-    # ===== L1 入口质量门 =====
-    q = quality_gate.assess(a.input)
-    qr = quality_gate.human_report(q)
-    print(qr)
-    rep.append("## ① 录音体检(L1 质量门)\n```\n" + qr + "\n```\n")
-    if q["gate"] == "block":
-        rep.append("> ⚠️ 质量门判定**太差**:结果会大段不可靠,优先按上面修法重录。\n")
-        if engine == "bytedance":
-            warn = "⚠️ 低质音频对 ByteDance 是 OOD,会幻觉假和弦;建议改 --engine crepe 或换好录音。"
-            print(warn); rep.append("> " + warn + "\n")
-
-    # ===== L2 选引擎转录 =====
-    target = run_engine(engine, a.input, a.fmin, a.fmax)
-    notes = target["notes"]
-    (out / "notes.json").write_text(json.dumps(target, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    # ===== 定调(稳健,不被少数坏音带偏)=====
-    if a.key:
-        key = a.key
-    else:
-        tonic, _m, _s = confidence._detect_scale_robust(notes)
-        key = confidence.PC[tonic]
-
-    # ===== 渲染:MIDI + 五线谱 +(单音才出)简谱 =====
-    eng_t.target_to_pretty_midi(target).write(str(out / "out.mid"))
-    mxl = eng_t.target_to_musicxml(target, out / "out.musicxml", key_name=key)
-    fmts = ("staff", "jianpu") if is_mono else ("staff",)
+    rendered: dict = {}
+    rc = 0
+    # 任一阶段失败都不应让整页崩 + 吞掉报告:各阶段独立 try,报告.md 在 finally 一定落盘(修审计 H3/H4)
     try:
-        rr = eng_r.render(str(mxl), str(out), formats=fmts, jianpu_format="pdf")
-        rendered = {k: Path(v).name for k, v in rr.items()}
-    except Exception as e:
-        rendered = {"err": repr(e)[:120]}
-        print("RENDER-ERR", rendered["err"])
+        # ===== L1 入口质量门 =====
+        q = quality_gate.assess(a.input)
+        qr = quality_gate.human_report(q)
+        print(qr)
+        rep.append("## ① 录音体检(L1 质量门)\n```\n" + qr + "\n```\n")
+        if q["gate"] == "block":
+            rep.append("> ⚠️ 质量门判定**太差**:结果会大段不可靠,优先按上面修法重录。\n")
+            if engine == "bytedance":
+                warn = "⚠️ 低质音频对 ByteDance 是 OOD,会幻觉假和弦;建议改 --engine crepe 或换好录音。"
+                print(warn); rep.append("> " + warn + "\n")
 
-    # ===== L3 置信度(复音简谱无意义,仅单音出)=====
-    conf_txt = ""
-    if is_mono:
-        r = confidence.assess(a.input, notes, key=key, gate_tier=q["tier"], fmin=a.fmin, fmax=a.fmax)
-        conf_txt = confidence.human_report(r)
-        print("\n" + conf_txt)
-        (out / "confidence.json").write_text(json.dumps(r, ensure_ascii=False, indent=2), encoding="utf-8")
+        # ===== L2 选引擎转录 =====
+        try:
+            target = run_engine(engine, a.input, a.fmin, a.fmax)
+        except Exception as e:
+            msg = (f"引擎「{engine}」转录失败:{type(e).__name__}: {e}\n"
+                   f"提示:basic-pitch 需 TensorFlow 2.15 干净环境;bytedance 需 torch + 首次联网下权重。"
+                   f"快速上手请用默认引擎 crepe(人声/单旋律最佳)。")
+            print("ENGINE-ERR", msg)
+            rep.append("## ② 转录失败\n```\n" + msg + "\n```\n")
+            return 1
+        notes = target["notes"]
+        (out / "notes.json").write_text(json.dumps(target, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    rep.append(f"## ② 引擎 + 定调(L2)\n- 引擎:{ENGINES[engine]}\n- 调:**1={key}**\n- 音符数:{len(notes)}\n")
-    if conf_txt:
-        rep.append("## ③ 扒谱可信度(L3)\n```\n" + conf_txt + "\n```\n")
-    flist = ["staff.svg 五线谱(浏览器开)", "out.mid 回放核对", "out.musicxml", "notes.json"]
-    if is_mono:
-        flist += ["jianpu.pdf 简谱", "confidence.json 逐音可信度"]
-    rep.append("## ④ 文件清单\n" + "\n".join(f"- {x}" for x in flist) + "\n")
-    rep.append("\n> 先看体检档位,再看可信度【存疑段】——只核对那几处,其余放心。复音引擎(basic-pitch/bytedance)只出五线谱。\n")
-    (out / "报告.md").write_text("\n".join(rep), encoding="utf-8")
-    print("\n=> 一站式报告:", out / "报告.md")
-    print("=> 渲染:", rendered)
-    return 0
+        # ===== 定调(稳健,不被少数坏音带偏)=====
+        if a.key:
+            key = a.key
+        else:
+            try:
+                tonic, _m, _s = confidence._detect_scale_robust(notes)
+                key = confidence.PC[tonic]
+            except Exception:
+                key = "C"
+
+        # ===== 渲染:MIDI + 五线谱 +(单音才出)简谱(各步独立兜底)=====
+        try:
+            eng_t.target_to_pretty_midi(target).write(str(out / "out.mid"))
+        except Exception as e:
+            print("MIDI-ERR", repr(e)); rep.append(f"> ⚠️ MIDI 生成失败:{type(e).__name__}: {e}\n")
+        try:
+            mxl = eng_t.target_to_musicxml(target, out / "out.musicxml", key_name=key)
+            fmts = ("staff", "jianpu") if is_mono else ("staff",)
+            try:
+                rr = eng_r.render(str(mxl), str(out), formats=fmts, jianpu_format="pdf")
+                rendered = {k: Path(v).name for k, v in rr.items()}
+            except Exception as e:
+                rendered = {"err": repr(e)[:120]}
+                print("RENDER-ERR", rendered["err"])
+        except Exception as e:
+            print("MUSICXML-ERR", repr(e)); rep.append(f"> ⚠️ MusicXML 生成失败:{type(e).__name__}: {e}\n")
+
+        # ===== L3 置信度(复音简谱无意义,仅单音出)=====
+        conf_txt = ""
+        if is_mono:
+            try:
+                r = confidence.assess(a.input, notes, key=key, gate_tier=q["tier"], fmin=a.fmin, fmax=a.fmax)
+                conf_txt = confidence.human_report(r)
+                print("\n" + conf_txt)
+                (out / "confidence.json").write_text(json.dumps(r, ensure_ascii=False, indent=2), encoding="utf-8")
+            except Exception as e:
+                print("CONF-ERR", repr(e)); conf_txt = f"(置信度评估失败:{type(e).__name__}: {e})"
+
+        rep.append(f"## ② 引擎 + 定调(L2)\n- 引擎:{ENGINES[engine]}\n- 调:**1={key}**\n- 音符数:{len(notes)}\n")
+        if conf_txt:
+            rep.append("## ③ 扒谱可信度(L3)\n```\n" + conf_txt + "\n```\n")
+        # 文件清单按【实际产物】动态生成,避免谎报不存在的 jianpu.pdf(修审计 M3)
+        flist = []
+        for fn, label in (("staff.svg", "staff.svg 五线谱(浏览器开)"), ("out.mid", "out.mid 回放核对"),
+                          ("out.musicxml", "out.musicxml"), ("notes.json", "notes.json")):
+            if (out / fn).is_file():
+                flist.append(label)
+        if (out / "jianpu.pdf").is_file():
+            flist.append("jianpu.pdf 简谱")
+        elif (out / "jianpu.ly").is_file():
+            flist.append("jianpu.ly 简谱源(装 LilyPond 后可渲染成图)")
+        if (out / "confidence.json").is_file():
+            flist.append("confidence.json 逐音可信度")
+        rep.append("## ④ 文件清单\n" + "\n".join(f"- {x}" for x in flist) + "\n")
+        rep.append("\n> 先看体检档位,再看可信度【存疑段】——只核对那几处,其余放心。复音引擎(basic-pitch/bytedance)只出五线谱。\n")
+        print("=> 渲染:", rendered)
+    finally:
+        (out / "报告.md").write_text("\n".join(rep), encoding="utf-8")
+        print("\n=> 一站式报告:", out / "报告.md")
+    return rc
 
 
 if __name__ == "__main__":

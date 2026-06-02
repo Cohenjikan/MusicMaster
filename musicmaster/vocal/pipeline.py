@@ -9,11 +9,18 @@
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Optional, Union
 
 from .correct import correct
 from .voice import resample, voice
+
+# 直跑 `python -m musicmaster.vocal.pipeline` 时:GBK/英文代码页控制台打印中文会崩,统一切 UTF-8(防御式)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 
 PathLike = Union[str, Path]
 

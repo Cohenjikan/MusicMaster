@@ -44,6 +44,8 @@ def main():
 
     WIN, OV = a.window, a.overlap
     HOP = WIN - OV
+    if HOP <= 0:  # overlap>=window 会让切窗 while 死循环(修审计 M7)
+        raise SystemExit(f"[run_full] 参数错误:overlap({OV}) 必须 < window({WIN}),否则切窗会死循环。")
 
     # 任意格式/采样率/长度 → 24k 单声道;两者裁到等长(time-aligned)
     src, _ = librosa.load(a.source, sr=sr, mono=True)

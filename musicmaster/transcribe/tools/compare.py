@@ -13,7 +13,10 @@
 from __future__ import annotations
 import argparse, json, sys
 from pathlib import Path
-sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 import numpy as np
 
 PC=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]

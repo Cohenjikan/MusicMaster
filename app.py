@@ -71,11 +71,10 @@ def _sep_python() -> str | None:
 def do_convert(file, direction, key):
     if file is None:
         return "请先上传文件。", None, None
-    from musicmaster.convert import convert as cv
-
     src = Path(file)
     d = _job_dir("convert")
     try:
+        from musicmaster.convert import convert as cv
         if direction == "简谱 → 五线谱(MusicXML)":
             score = cv.load_any(src)
             out = d / (src.stem + ".musicxml")
@@ -159,7 +158,13 @@ def do_vocal(raw, ref, self_ref, correct_steps, voice_steps, voice_cfg):
                               correct_steps=int(correct_steps), voice_steps=int(voice_steps),
                               voice_cfg=float(voice_cfg))
         final = res.get("final")
-        msg = "✅ 两段式完成:\n" + "\n".join(f"{k}: {v}" for k, v in res.items())
+        detail = "\n".join(f"{k}: {v}" for k, v in res.items())
+        if final:
+            msg = "✅ 两段式完成:\n" + detail
+        else:
+            # 子进程 returncode=0 但没产出 vc_*.wav 的边缘情况:别谎报成功(修审计 low)
+            msg = ("⚠️ 修音完成,但换音色未产出成品(Seed-VC 没生成 vc_*.wav)。"
+                   "请看运行窗口日志,检查 .venv-svc 与权重是否就绪。\n" + detail)
         return msg, (str(final) if final else None), (str(res["corrected_24k"]))
     except Exception as e:
         import traceback
@@ -268,7 +273,11 @@ def build() -> gr.Blocks:
 if __name__ == "__main__":
     # 端口:环境变量优先;否则 None → gradio 自动从 7860 起找空闲端口(避免「端口被占」启动失败)。
     env_port = os.environ.get("GRADIO_SERVER_PORT")
-    port = int(env_port) if env_port else None
+    try:
+        port = int(env_port) if env_port else None
+    except ValueError:
+        print(f"[MusicMaster] GRADIO_SERVER_PORT={env_port!r} 非数字,改用自动端口(从 7860 起找空闲)。")
+        port = None
     print(f"\n========================================\n"
           f"  MusicMaster 启动中,请稍候(首次加载约 20-40 秒,要载入 TensorFlow)...\n"
           f"  就绪后浏览器会自动打开;若没弹出,看下方 gradio 打印的\n"

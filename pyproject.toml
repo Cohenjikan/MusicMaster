@@ -30,11 +30,11 @@ dependencies = [
 render = ["verovio>=4.0", "jianpu-ly>=1.8"]
 # 扒谱生产路径:CREPE(单旋律最优) + basic-pitch(复音兜底)。两者均 TF 后端。
 # ⚠️ Windows 上建议 `pip install --no-deps crepe` 以免 crepe 把 tensorflow 降级(见 README)。
-transcribe = ["crepe", "tensorflow>=2.15,<2.16", "basic-pitch>=0.3"]
+transcribe = ["crepe", "hmmlearn>=0.3", "tensorflow==2.15.0", "basic-pitch>=0.3"]
 # 钢琴复音(ByteDance 高分辨率;MAESTRO 权重,个人/研究用)。torch 与 TF 同 venv 需注意版本。
 bytedance = ["piano-transcription-inference", "torch>=2.0"]
 # 图形界面(Gradio 单页 Web GUI)
-gui = ["gradio>=4.0"]
+gui = ["gradio==6.15.2"]
 # 可选 server 模式(FastAPI REST,供 API 消费者;Gradio 是主 GUI)
 server = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "httpx>=0.27", "pydantic>=2.5", "python-multipart>=0.0.9"]
 dev = ["pytest>=7", "jsonschema>=4"]

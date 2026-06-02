@@ -16,12 +16,13 @@ verovio>=4.0            # 五线谱 → SVG(LGPL,作为库加载)
 jianpu-ly>=1.8          # 简谱 → LilyPond .ly(Apache;成图另需 LilyPond CLI,见 README)
 
 # 扒谱引擎(TF 后端)
-tensorflow>=2.15,<2.16  # CREPE / basic-pitch 后端
+tensorflow==2.15.0      # CREPE / basic-pitch 后端(固定:唯一同时满足 basic-pitch<2.15.1 与 crepe)
 crepe                   # 单旋律 f0(MIT,含权重);建议 --no-deps 安装以免降级 TF
+hmmlearn>=0.3           # crepe --no-deps 漏装的依赖(viterbi 路径需要);补上使 pip check 干净
 basic-pitch>=0.3        # 通用复音乐器转录(Apache,含 ICASSP-2022 权重)
 
 # 图形界面
-gradio>=4.0
+gradio==6.15.2          # 锁定已验证版本(app.py 基于 Gradio 6.x API,(label,value) 选项 + info=)
 
 # 开发/校验
 jsonschema>=4

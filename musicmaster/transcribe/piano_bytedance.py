@@ -12,7 +12,10 @@ CLI: PYTHONUTF8=1 PY piano_bytedance.py IN.wav [--out-mid x.mid]
 from __future__ import annotations
 import argparse, json, sys, tempfile
 from pathlib import Path
-sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 import librosa
 
 _TR = None  # 复用转录器(避免重复加载权重)
@@ -21,10 +24,24 @@ _TR = None  # 复用转录器(避免重复加载权重)
 def _get_transcriptor():
     global _TR
     if _TR is None:
-        import torch
+        try:
+            import torch
+        except Exception as e:
+            raise RuntimeError(
+                "ByteDance 引擎需要 PyTorch,但当前环境未装 torch。请改用 --engine crepe,"
+                "或在本 venv 安装 torch 后重试。"
+            ) from e
         from piano_transcription_inference import PianoTranscription
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        _TR = PianoTranscription(device=device)
+        try:
+            _TR = PianoTranscription(device=device)
+        except Exception as e:
+            raise RuntimeError(
+                "ByteDance 钢琴模型加载失败(通常是权重未就绪)。首次使用会下载 ~165MB 权重到 "
+                "~/piano_transcription_inference_data/;Windows 无 wget 时可能下载失败。"
+                "请确保联网/wget 可用,或手动下载该 .pth 到上述目录后重试;也可改用 --engine crepe。"
+                f"(原始错误:{type(e).__name__}: {e})"
+            ) from e
         _TR._device_str = device
     return _TR
 

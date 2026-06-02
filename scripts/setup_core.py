@@ -10,6 +10,12 @@ from __future__ import annotations
 import argparse, os, subprocess, sys, venv
 from pathlib import Path
 
+# 本脚本用【系统 Python】在默认 GBK 控制台运行;输出/重定向遇非 GBK 字符会 UnicodeEncodeError,统一切 UTF-8(防御式)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -33,14 +39,14 @@ def main():
     print("[2/5] 升级 pip")
     run("install", "-U", "pip")
     print("[3/5] 装 TensorFlow(CREPE/basic-pitch 后端)")
-    run("install", "tensorflow>=2.15,<2.16")
+    run("install", "tensorflow==2.15.0")  # 固定 2.15.0:唯一同时满足 basic-pitch(<2.15.1)与 crepe 的版本
     print("[4/5] 装 crepe(--no-deps,保 TF 不被降级)")
     run("install", "--no-deps", "crepe")
     print("[5/5] 装 requirements-core + 本包")
     run("install", "-r", str(ROOT / "requirements-core.txt"))
     run("install", "-e", str(ROOT))
 
-    print("\n✅ 完成。启动 GUI:")
+    print("\n[OK] 完成。启动 GUI:")
     print(f"    {py} {ROOT / 'app.py'}")
     print("简谱出图还需 LilyPond,并设 LILYPOND_EXE(见 README)。")
 

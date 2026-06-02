@@ -31,7 +31,10 @@
 from __future__ import annotations
 import argparse, importlib, re, sys
 from pathlib import Path
-sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 
 PC = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
 DEG2REL = {1:0,2:2,3:4,4:5,5:7,6:9,7:11}
@@ -59,7 +62,7 @@ def parse_jianpu(text: str):
         # 正文行:收集 token(去掉小节线)
         body_tokens += [t for t in s.split() if t != "|"]
 
-    tonic_pc = PC.index(_norm_pc(tonic_name))
+    tonic_pc = _tonic_pc(tonic_name)
     part = stream.Part()
     part.append(m21tempo.MetronomeMark(number=int(round(bpm))))
     try:
@@ -95,6 +98,23 @@ def _norm_pc(name):
     return {"DB":"C#","EB":"D#","GB":"F#","AB":"G#","BB":"A#"}.get(name.upper(), name[0].upper()+name[1:])
 
 
+def _tonic_pc(name) -> int:
+    """调名 → pitch class(0-11)。用 music21 解析,天然支持全部 enharmonic 拼写
+    (Cb/Fb/E#/B#/Db/Bb…);本格式用 'b' 表示降号(music21 用 '-')。
+    空串/非法调名 → 回退 C(0)并告警,绝不抛裸 ValueError/IndexError(修审计 H1/H2/M1)。"""
+    s = (name or "").strip()
+    if s:
+        letter, acc = s[0].upper(), s[1:].replace("b", "-")  # b=降 → music21 的 -
+        try:
+            from music21 import pitch as m21pitch
+            return m21pitch.Pitch(letter + acc).pitchClass
+        except Exception:
+            pass
+    print(f"[convert] 警告:无法识别调名 {name!r},按 C 大调处理"
+          f"(合法调名如 C/G/D/A/E/B/F#/Bb/Eb/Cb 等)。", file=sys.stderr)
+    return 0
+
+
 def _parse_note_token(tok):
     m = re.fullmatch(r"([#b]?)([0-7])([',]*)(_*)(\.?)", tok)
     if not m:
@@ -128,7 +148,7 @@ def score_to_jianpu(score, key_name=None) -> str:
         else:
             ks = flat.getElementsByClass(m21key.KeySignature)
             tonic_name = (ks[0].asKey("major").tonic.name.replace("-", "b")) if ks else "C"
-    tonic_pc = PC.index(_norm_pc(tonic_name))
+    tonic_pc = _tonic_pc(tonic_name)
     # 拍号/速度
     tss = flat.getElementsByClass(meter.TimeSignature)
     ts = tss[0] if tss else None
@@ -187,14 +207,28 @@ def _dur_tokens(ql):
 
 
 # ----------------------------- 统一导入接口 ----------------------------- #
+_SCORE_EXTS = (".musicxml", ".xml", ".mxl", ".mid", ".midi", ".abc")
+
+
 def load_any(path):
-    """path → music21 Score。新格式在 _LOADERS 注册扩展名即可(预留接口)。"""
+    """path → music21 Score。.jianpu/.jp/.txt 走简谱解析;五线谱家族(MusicXML/MIDI/ABC)交给 music21。
+
+    未知扩展名 / 文件不存在 / 空或畸形文件 → 抛带本工具上下文的清晰错误(而非裸的 music21
+    底层异常,修审计 M2)。GUI 与 CLI 上层再把它转成友好提示。"""
     p = Path(path); ext = p.suffix.lower()
+    if not p.is_file():
+        raise FileNotFoundError(f"找不到文件:{p}")
     if ext in (".jianpu", ".jp", ".txt"):
         return parse_jianpu(p.read_text(encoding="utf-8"))
-    # 五线谱家族:交给 music21.converter(musicxml/mxl/xml/mid/midi/abc/...)
+    if ext not in _SCORE_EXTS:
+        raise ValueError(
+            f"不支持的扩展名 {ext!r}。简谱用 .jianpu/.jp/.txt;"
+            f"五线谱用 {' / '.join(_SCORE_EXTS)}。")
     from music21 import converter
-    return converter.parse(str(p))
+    try:
+        return converter.parse(str(p))
+    except Exception as e:
+        raise ValueError(f"无法解析 {p.name}:文件可能为空或格式损坏({type(e).__name__}: {e})") from e
 
 
 _LOADERS = {".jianpu": "parse_jianpu", ".jp": "parse_jianpu", ".txt": "parse_jianpu"}  # 预留:未来格式按此注册
@@ -238,9 +272,14 @@ def main(argv=None):
 
 def _render(musicxml_path, fmt):
     eng_r = importlib.import_module("musicmaster.core.render")
-    res = eng_r.render(str(musicxml_path), str(Path(musicxml_path).parent),
-                       formats=(fmt,), jianpu_format="pdf")
-    print("RENDER", {k: str(v) for k, v in res.items()})
+    try:
+        res = eng_r.render(str(musicxml_path), str(Path(musicxml_path).parent),
+                           formats=(fmt,), jianpu_format="pdf")
+        print("RENDER", {k: str(v) for k, v in res.items()})
+    except Exception as e:
+        # 简谱图需 LilyPond;未装时优雅降级(与 autopilot/GUI 行为一致),不让 CLI 崩(修审计 M16)
+        print(f"[convert] 渲染跳过({type(e).__name__}: {e})。"
+              f"五线谱无需外部程序;简谱图需装 LilyPond 并设 LILYPOND_EXE——未装时已产出中间 .ly,可后续手动渲染。")
 
 
 if __name__ == "__main__":

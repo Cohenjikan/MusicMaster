@@ -10,6 +10,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+# 双击/系统 Python 直跑:GBK(及英文版 cp1252/437)控制台打印中文会 UnicodeEncodeError,统一切 UTF-8(防御式)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 ROOT = Path(__file__).resolve().parent
 vpy = ROOT / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 app = ROOT / "app.py"
