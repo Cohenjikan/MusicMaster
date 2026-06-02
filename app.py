@@ -80,9 +80,10 @@ def do_convert(file, direction, key):
             score = cv.load_any(src)
             out = d / (src.stem + ".musicxml")
             score.write("musicxml", fp=str(out))
-            # 顺带渲染五线谱预览
-            from musicmaster.core import render as rd
-            rr = rd.render(str(out), str(d), formats=("staff",))
+            # 顺带渲染五线谱预览(core.__init__ 把 render 函数绑成了包属性,
+            # 必须从子模块直接 import 函数本身,不能写 core.render 当模块用)
+            from musicmaster.core.render import render as render_score
+            rr = render_score(str(out), str(d), formats=("staff",))
             staff = rr.get("staff")
             return f"✅ 简谱 → 五线谱 MusicXML\n{out}", _svg_html(staff) if staff else "", str(out)
         else:  # 五线谱 → 简谱
