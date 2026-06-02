@@ -144,7 +144,7 @@ def do_separate(audio, stages, denoise):
 
 
 # ─────────────────────────── 修音换音色 ─────────────────────────── #
-def do_vocal(raw, ref, self_ref, correct_steps, voice_steps):
+def do_vocal(raw, ref, self_ref, correct_steps, voice_steps, voice_cfg):
     if not (raw and ref and self_ref):
         return "请上传三个文件:① 原始清唱 ② 去和声参考 ③ 你自己的清唱(音色锚)。", None, None
     from musicmaster.vocal import config as vcfg, pipeline as vpipe
@@ -156,7 +156,8 @@ def do_vocal(raw, ref, self_ref, correct_steps, voice_steps):
     d = _job_dir("vocal")
     try:
         res = vpipe.two_stage(raw, ref, self_ref, d,
-                              correct_steps=int(correct_steps), voice_steps=int(voice_steps))
+                              correct_steps=int(correct_steps), voice_steps=int(voice_steps),
+                              voice_cfg=float(voice_cfg))
         final = res.get("final")
         msg = "✅ 两段式完成:\n" + "\n".join(f"{k}: {v}" for k, v in res.items())
         return msg, (str(final) if final else None), (str(res["corrected_24k"]))
@@ -180,8 +181,10 @@ def build() -> gr.Blocks:
                 cv_file = gr.File(label="上传文件(.jianpu / .musicxml / .mid / .abc)")
                 with gr.Column():
                     cv_dir = gr.Radio(["简谱 → 五线谱(MusicXML)", "五线谱 → 简谱"],
-                                      value="简谱 → 五线谱(MusicXML)", label="方向")
-                    cv_key = gr.Textbox(label="主音(转简谱时,如 G;留空自动)", value="")
+                                      value="简谱 → 五线谱(MusicXML)", label="方向",
+                                      info="简谱=数字谱(1234567);五线谱=MusicXML/MIDI/ABC")
+                    cv_key = gr.Textbox(label="主音(调号 1=哪个音)", value="",
+                                        info="仅「转简谱」时用:填该曲主音,如 G=G大调;留空则自动判定")
                     cv_btn = gr.Button("转换", variant="primary")
             cv_out = gr.Textbox(label="结果", lines=8)
             cv_svg = gr.HTML(label="五线谱预览")
@@ -194,8 +197,15 @@ def build() -> gr.Blocks:
             with gr.Row():
                 tr_audio = gr.Audio(label="上传音频", type="filepath")
                 with gr.Column():
-                    tr_engine = gr.Radio(["crepe", "basic-pitch", "bytedance"], value="crepe", label="引擎")
-                    tr_key = gr.Textbox(label="调(如 C;留空自动定调)", value="")
+                    tr_engine = gr.Radio(
+                        [("crepe(单旋律·人声/哼唱最稳·默认)", "crepe"),
+                         ("basic-pitch(通用复音·乐器和弦兜底)", "basic-pitch"),
+                         ("bytedance(钢琴专用·SOTA·仅干净44.1k真钢琴)", "bytedance")],
+                        value="crepe", label="引擎(识谱算法)",
+                        info="按素材选:人声/单旋律→crepe;多音/乐器和弦→basic-pitch;纯钢琴录音→bytedance。"
+                             "选错会幻觉假音(如低质音频用 bytedance)。")
+                    tr_key = gr.Textbox(label="调(1=主音)", value="",
+                                        info="如 C=C大调;留空则自动定调(稳健,不被少数坏音带偏)")
                     tr_btn = gr.Button("扒谱", variant="primary")
             tr_report = gr.Markdown(label="报告(体检 + 可信度 + 存疑段)")
             tr_svg = gr.HTML(label="五线谱")
@@ -207,8 +217,14 @@ def build() -> gr.Blocks:
             with gr.Row():
                 sp_audio = gr.Audio(label="上传混音", type="filepath")
                 with gr.Column():
-                    sp_stages = gr.Textbox(label="段(1,2,3 的子集)", value="1,2,3")
-                    sp_denoise = gr.Radio(["dereverb", "deecho"], value="dereverb", label="降噪方法")
+                    sp_stages = gr.Textbox(label="处理段(按序级联)", value="1,2,3",
+                                           info="1=分离人声/伴奏 · 2=去和声(去合音/backing) · 3=降噪提纯。"
+                                                "填子集,如 1 / 1,2 / 1,2,3 / 2,3")
+                    sp_denoise = gr.Radio(
+                        [("dereverb(去混响·默认·音量稳/不闷)", "dereverb"),
+                         ("deecho(去回声·备选)", "deecho")],
+                        value="dereverb", label="降噪方法(第3段用)",
+                        info="去混响=消房间残响(默认,更稳);去回声=消重复回声。仅在跑第3段时生效。")
                     sp_btn = gr.Button("分离", variant="primary")
             sp_out = gr.Textbox(label="日志/结果", lines=8)
             sp_dl = gr.File(label="下载各轨", file_count="multiple")
@@ -230,13 +246,19 @@ def build() -> gr.Blocks:
                 vc_ref = gr.Audio(label="② 去和声参考(取目标旋律)", type="filepath")
                 vc_self = gr.Audio(label="③ 你自己的清唱(音色锚)", type="filepath")
             with gr.Row():
-                vc_csteps = gr.Slider(50, 200, value=150, step=10, label="修音步数")
-                vc_vsteps = gr.Slider(20, 100, value=50, step=10, label="换音色步数")
-                vc_btn = gr.Button("修音 + 换音色", variant="primary")
+                vc_csteps = gr.Slider(50, 200, value=150, step=10, label="修音步数",
+                                      info="DiffPitcher 扩散迭代次数:越大音准修得越精细但越慢。默认150;想快可降到50。")
+                vc_vsteps = gr.Slider(20, 100, value=50, step=10, label="换音色步数",
+                                      info="Seed-VC 扩散迭代次数:越大音质越细腻但越慢。默认50;25也可用。")
+                vc_cfg = gr.Slider(0.0, 1.0, value=0.7, step=0.1, label="人声近似度(cfg 引导强度)",
+                                   info="越高越强调「贴目标音色」的条件(效果较细微);设 0 最快(≈1.5×)。默认0.7。"
+                                        "想更像你:优先换更干净/更长的③音色锚,并适当加大换音色步数。")
+            vc_btn = gr.Button("修音 + 换音色", variant="primary")
             vc_out = gr.Textbox(label="结果", lines=6)
             vc_final = gr.Audio(label="成品(在调 + 干净 + 仍是你)")
             vc_mid = gr.Audio(label="中间产物(纯修音 24k)")
-            vc_btn.click(do_vocal, [vc_raw, vc_ref, vc_self, vc_csteps, vc_vsteps], [vc_out, vc_final, vc_mid])
+            vc_btn.click(do_vocal, [vc_raw, vc_ref, vc_self, vc_csteps, vc_vsteps, vc_cfg],
+                         [vc_out, vc_final, vc_mid])
 
         gr.Markdown("---\n小贴士:简谱图(jianpu.pdf)需本机装 LilyPond 才出图,否则只产出 `.ly`;"
                     "五线谱(Verovio)纯库无需外部程序。")

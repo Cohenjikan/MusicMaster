@@ -27,6 +27,7 @@ def two_stage(
     correct_steps: int = 150,
     shift: int = -12,
     voice_steps: int = 50,
+    voice_cfg: float = 0.7,
 ) -> dict:
     """完整两段式:修音准 → 换音色=本人。
 
@@ -36,6 +37,8 @@ def two_stage(
         self_ref:  用户自己的一段干净清唱(目标音色=身份锚)。
         out_dir:   输出目录(产出 corrected_24k.wav / corrected_44k.wav / 最终 SVC wav)。
         correct_steps / shift / voice_steps: 各阶段参数(默认 = 验证配方)。
+        voice_cfg: Seed-VC 的 inference_cfg_rate(引导强度,0~1;越高越强调目标音色条件,
+                   效果较细微;0 最快≈1.5×。默认 0.7 = 验证配方)。
 
     Returns:
         {"corrected_24k": Path, "corrected_44k": Path, "final": Path|None}
@@ -51,7 +54,8 @@ def two_stage(
     corrected_44k = resample(corrected_24k, out_dir / "corrected_44k.wav")
 
     # Stage 2:换音色=本人(GPU 子进程 → .venv-svc)
-    final = voice(corrected_44k, self_ref, out_dir, diffusion_steps=voice_steps)
+    final = voice(corrected_44k, self_ref, out_dir,
+                  diffusion_steps=voice_steps, inference_cfg_rate=voice_cfg)
 
     return {"corrected_24k": corrected_24k, "corrected_44k": corrected_44k, "final": final}
 
@@ -67,9 +71,12 @@ if __name__ == "__main__":
     ap.add_argument("--correct-steps", type=int, default=150)
     ap.add_argument("--shift", type=int, default=-12)
     ap.add_argument("--voice-steps", type=int, default=50)
+    ap.add_argument("--voice-cfg", type=float, default=0.7,
+                    help="Seed-VC 引导强度 inference_cfg_rate(0~1;越高越贴目标音色,效果细微;0 最快)")
     a = ap.parse_args()
     r = two_stage(a.raw, a.ref, a.self_ref, a.out,
-                  correct_steps=a.correct_steps, shift=a.shift, voice_steps=a.voice_steps)
+                  correct_steps=a.correct_steps, shift=a.shift,
+                  voice_steps=a.voice_steps, voice_cfg=a.voice_cfg)
     print("[two_stage] 产物:")
     for k, v in r.items():
         print(f"  {k:14s} {v}")
