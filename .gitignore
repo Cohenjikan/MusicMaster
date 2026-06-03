@@ -9,6 +9,9 @@ dist/
 .mypy_cache/
 .ruff_cache/
 
+# ═══════════════ Claude Code 本地配置(harness 工具/预览/会话,绝不入库) ═══════════════
+.claude/
+
 # ═══════════════ 虚拟环境(4 个 venv 都不入库) ═══════════════
 .venv/
 .venv-*/
