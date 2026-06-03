@@ -1,0 +1,23 @@
+# ═══════════ 修音准 DiffPitcher(GPU,独立 venv:.venv-neural)═══════════
+# Stage 1:torchcrepe 目标 f0 → DDIM 扩散修音高 → BigVGAN 声码器 → 24kHz。
+# 权重 ckpts/(world_fixed_40.pt + bigvgan_24khz_100band)随 DiffPitcher 仓库下载(见 scripts/setup_vocal)。
+#
+# torch/torchaudio 按 CUDA 版本单独安装(本项目验证于 cu124):
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+torchcrepe>=0.0.22
+diffusers
+einops
+fastdtw
+tqdm
+pyyaml
+numpy<2
+librosa>=0.10
+soundfile>=0.12
+scipy>=1.10
+pyworld>=0.3
+# 注:pysptk 在 Windows 无需安装(run_qt4 已用 pyworld 等价实现替代)。
+
+# ───────────── 换音色 Seed-VC(GPU,另一独立 venv:.venv-svc)─────────────
+# Seed-VC 有自己锁定版本的 requirements(torch==2.4.0 / transformers==4.46.3 等),
+# 请用 vendor/seed-vc/requirements.txt 安装到 .venv-svc(见 scripts/setup_vocal),不要与上面的 venv 混装。

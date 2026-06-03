@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://singer.dev/schemas/target_f0_frames.schema.json",
+  "title": "M5 对齐后的逐帧目标基频",
+  "description": "M5 对齐输出:对齐到用户帧(hop_ms)的逐帧目标基频 + DTW 时间映射。供 M6 修音直接逐帧消费。对应 §3 契约: (user_f0.json, target.json) -> target_f0_frames.json",
+  "type": "object",
+  "required": ["hop_ms", "target_f0_hz", "time_map"],
+  "additionalProperties": false,
+  "properties": {
+    "hop_ms": { "type": "number", "exclusiveMinimum": 0, "description": "帧移(毫秒),与用户 f0 一致" },
+    "target_f0_hz": {
+      "type": "array",
+      "items": { "type": "number", "minimum": 0 },
+      "description": "逐帧目标基频(Hz),已对齐到用户帧;无目标(休止/未唱)处为 0"
+    },
+    "time_map": {
+      "type": "object",
+      "description": "DTW warping 路径:user_s[i] ↔ target_s[i];两数组等长,各自单调非减",
+      "required": ["user_s", "target_s"],
+      "additionalProperties": false,
+      "properties": {
+        "user_s": { "type": "array", "items": { "type": "number", "minimum": 0 } },
+        "target_s": { "type": "array", "items": { "type": "number", "minimum": 0 } }
+      }
+    }
+  }
+}

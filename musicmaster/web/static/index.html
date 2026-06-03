@@ -1,0 +1,795 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MusicMaster · 一体化音乐处理</title>
+<meta name="description" content="MusicMaster — 人声分离 · 音频记谱 · 简谱⇄五线谱互译 · 修音换音色。纯本地运行,整合多个一线开源模型。">
+
+<!-- 设计稿:纯静态 UI / 艺术设计稿,不接任何后端功能。 -->
+
+<!-- 字体全部自托管(无外链、离线可用、不向第三方泄露访客 IP):
+     Fraunces / Inter / JetBrains Mono 为 OFL,woff2 在 ./fonts/(各自 OFL 见 fonts/OFL-*.txt);
+     中文走系统字体(宋体 SimSun/Songti · 黑体 PingFang/微软雅黑),零下载。 -->
+
+<style>
+/* —— 自托管 OFL 字体(Latin 可变字体,Latin 子集 ~170KB 共计) —— */
+@font-face{font-family:'Fraunces';font-style:normal;font-weight:400 700;font-display:swap;src:url('fonts/fraunces-normal.woff2') format('woff2-variations')}
+@font-face{font-family:'Fraunces';font-style:italic;font-weight:400 700;font-display:swap;src:url('fonts/fraunces-italic.woff2') format('woff2-variations')}
+@font-face{font-family:'Inter';font-style:normal;font-weight:400 600;font-display:swap;src:url('fonts/inter-normal.woff2') format('woff2-variations')}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400 600;font-display:swap;src:url('fonts/jetbrains-mono.woff2') format('woff2-variations')}
+/* ============================================================
+   MusicMaster — 一体化音乐处理
+   暖墨深色 + 衬线排版 + 黑胶唱片为音频符号(带唱臂/进度/倍速)
+   ============================================================ */
+:root{
+  --bg-0:#0b0a0d; --bg-1:#100e13; --bg-2:#16131b;
+  --surface:rgba(255,255,255,.024); --surface-2:rgba(255,255,255,.045); --surface-3:rgba(255,255,255,.07);
+  --border:rgba(255,255,255,.075); --border-2:rgba(255,255,255,.13); --border-3:rgba(255,255,255,.2);
+  --t0:#f6f2ec; --t1:#c8c1ce; --t2:#9b95a4; --t3:#847e92; /* t2/t3 提亮以满足 WCAG AA(小字≥4.5:1) */
+  --brand:#a78bfa; --brand-2:#7c3aed; --brand-rgb:167,139,250;
+  --accent:#a78bfa; --accent-2:#7c3aed; --accent-rgb:167,139,250;
+  --r-sm:10px; --r-md:16px; --r-lg:22px; --r-xl:32px; --maxw:1140px;
+  --serif:'Fraunces','Songti SC','SimSun','STSong','Noto Serif SC',Georgia,serif;
+  --serif-sc:'Fraunces','Songti SC','SimSun','STSong','Noto Serif SC',serif;
+  --sans:'Inter','PingFang SC','Microsoft YaHei','Hiragino Sans GB','Noto Sans SC',system-ui,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --music:'Bravura','Cambria Math','Segoe UI Symbol',serif;
+  --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.console[data-accent="convert"]   { --accent:#4ade80; --accent-2:#16a34a; --accent-rgb:74,222,128; }
+.console[data-accent="transcribe"]{ --accent:#fbbf24; --accent-2:#d97706; --accent-rgb:251,191,36; }
+.console[data-accent="separate"]  { --accent:#7aa2f7; --accent-2:#3b6fe0; --accent-rgb:122,162,247; }
+.console[data-accent="vocal"]     { --accent:#fb7299; --accent-2:#e0457b; --accent-rgb:251,114,153; }
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;font-family:var(--sans);color:var(--t1);background:var(--bg-0);line-height:1.7;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;overflow-x:hidden}
+h1,h2,h3,h4{margin:0;color:var(--t0);font-weight:500;line-height:1.2}
+p{margin:0}a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit}
+img,svg{display:block;max-width:100%}
+::selection{background:rgba(var(--accent-rgb),.3);color:#fff}
+
+.bg{position:fixed;inset:0;z-index:-2;overflow:hidden;background:radial-gradient(130% 100% at 50% -20%, #1a1424 0%, var(--bg-1) 48%, var(--bg-0) 100%)}
+.bg .orb{position:absolute;border-radius:50%;filter:blur(110px);opacity:.32;mix-blend-mode:screen;animation:drift 30s ease-in-out infinite}
+.bg .a{width:48vw;height:48vw;left:-12vw;top:-10vw;background:radial-gradient(circle,#7c3aed,transparent 66%)}
+.bg .b{width:40vw;height:40vw;right:-10vw;top:10vh;background:radial-gradient(circle,#e0457b,transparent 66%);animation-delay:-9s}
+.bg .c{width:36vw;height:36vw;left:24vw;bottom:-16vw;background:radial-gradient(circle,#d97706,transparent 66%);animation-delay:-18s}
+.bg::after{content:"";position:absolute;inset:0;background-image:var(--grain);background-size:170px;opacity:.045;mix-blend-mode:overlay}
+@keyframes drift{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(3vw,2vh) scale(1.06)}}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px}
+@media(max-width:640px){.wrap{padding:0 18px}}
+
+/* ============================================================
+   黑胶唱片(高质感:沟纹 + 分轨带 + 定向反光 + 唱片标 + 唱臂)
+   ============================================================ */
+.vinyl{position:relative;display:block;aspect-ratio:1;border-radius:50%;flex:none;width:var(--vs,84px);background:#000;
+  box-shadow:0 18px 50px rgba(0,0,0,.62),0 4px 12px rgba(0,0,0,.55),inset 0 0 0 1px rgba(255,255,255,.07),inset 0 0 22px rgba(0,0,0,.85)}
+.vinyl .disc{position:absolute;inset:0;border-radius:50%;overflow:hidden;
+  background:
+    radial-gradient(circle at 50% 50%, #0b0b0e 0 23%, rgba(11,11,14,0) 27%),
+    repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,.045) 0 .5px, rgba(0,0,0,0) .5px 1.4px, rgba(0,0,0,.55) 1.4px 2.4px),
+    repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,.06) 0 .9px, transparent .9px 13px),
+    radial-gradient(circle at 50% 50%, #1d1d22 0%, #111116 30%, #0a0a0d 60%, #050507 82%, #0c0c10 100%);
+  animation:spin var(--spin,3.6s) linear infinite;animation-play-state:paused;will-change:transform}
+.vinyl.spin .disc,.vinyl.spin .label,.is-playing .vinyl .disc,.is-playing .vinyl .label{animation-play-state:running}
+/* 定向高光:盘转、光不转(固定层) */
+.vinyl .gloss{position:absolute;inset:0;border-radius:50%;pointer-events:none;mix-blend-mode:screen;
+  background:
+    conic-gradient(from 208deg at 50% 50%, rgba(255,255,255,0) 0deg, rgba(255,255,255,.16) 24deg, rgba(255,255,255,0) 58deg,
+      rgba(255,255,255,0) 152deg, rgba(255,255,255,.1) 192deg, rgba(255,255,255,0) 232deg, rgba(255,255,255,0) 360deg),
+    radial-gradient(circle at 33% 25%, rgba(255,255,255,.18), transparent 44%)}
+/* 写实纸质厂牌(SVG symbol;弧形厂牌字 + 同心环 + 主轴孔 + 印面光泽) */
+.vinyl .gloss{z-index:1}
+.vinyl .label{position:absolute;inset:31%;z-index:3;display:block;overflow:visible;filter:drop-shadow(0 1px 3px rgba(0,0,0,.55));
+  animation:spin var(--spin,3.6s) linear infinite;animation-play-state:paused;will-change:transform}
+.vinyl svg.label use{pointer-events:none}
+/* 厂牌外的光滑导出带:定向反光 */
+.vinyl::after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;z-index:4;mix-blend-mode:screen;
+  background:radial-gradient(circle at 43% 33%, transparent 0 20%, rgba(255,255,255,.09) 23%, rgba(255,255,255,.02) 27%, transparent 30%)}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* 唱臂:暂停=抬起,播放=落下 */
+.tonearm{position:absolute;top:-3%;right:-5%;width:52%;height:62%;pointer-events:none;z-index:5;
+  transform-origin:86% 13%;transform:rotate(-25deg);transition:transform .85s cubic-bezier(.5,.05,.2,1)}
+.is-playing .tonearm,.vinyl.spin .tonearm,.atelier .tonearm{transform:rotate(5deg)}
+.tonearm .pivot{position:absolute;top:5%;right:5%;width:17%;aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(circle at 38% 34%,#4a4a52,#17171c);box-shadow:0 2px 6px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.25)}
+.tonearm .arm{position:absolute;top:11%;right:12%;width:3px;height:76%;border-radius:3px;transform-origin:top center;transform:rotate(25deg);
+  background:linear-gradient(180deg,#b8b8c2,#5f5f6a);box-shadow:0 1px 3px rgba(0,0,0,.5)}
+.tonearm .arm::after{content:"";position:absolute;bottom:-4px;left:-3.6px;width:11px;height:13px;border-radius:3px 3px 2px 2px;
+  background:linear-gradient(135deg,#d4d4dc,#7c7c88);box-shadow:0 1px 4px rgba(0,0,0,.55)}
+
+/* ============================================================
+   音频播放器(唱机:黑胶 + 进度 + 暂停 + 倍速)
+   ============================================================ */
+.player{display:flex;align-items:center;gap:20px}
+.player .deck{flex:none;position:relative;padding:8px 12px 8px 6px}
+.player .deck .vinyl{--vs:94px}
+.pbody{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px}
+.pname{font-family:var(--serif-sc);font-size:15.5px;color:var(--t0);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pname .psub{color:var(--t2);font-size:12.5px;font-weight:400;margin-left:6px}
+.pbar{position:relative;height:6px;border-radius:99px;background:var(--surface-3);cursor:pointer;width:100%;touch-action:none;user-select:none}
+.pbar.dragging .pthumb{transform:translate(-50%,-50%) scale(1.25)}
+.pbar::before{content:"";position:absolute;inset:-7px 0;}/* 更大点击区 */
+.pfill{position:absolute;left:0;top:0;height:100%;width:0%;border-radius:99px;background:linear-gradient(90deg,var(--accent-2),var(--accent))}
+.pthumb{position:absolute;top:50%;left:0%;width:13px;height:13px;border-radius:50%;background:#fff;transform:translate(-50%,-50%);
+  box-shadow:0 1px 5px rgba(0,0,0,.55);border:2px solid var(--accent);transition:transform .1s}
+.pbar:hover .pthumb{transform:translate(-50%,-50%) scale(1.18)}
+.pctrl{display:flex;align-items:center;gap:13px}
+.pplay{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:#fff;flex:none;
+  background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 4px 14px color-mix(in srgb,var(--accent) 38%,transparent)}
+.pplay svg{width:15px;height:15px}
+.ptime{font-family:var(--mono);font-size:11.5px;color:var(--t2);white-space:nowrap}
+.pspacer{flex:1}
+.pspeed{font-family:var(--mono);font-size:12px;color:var(--t1);padding:6px 10px;border-radius:9px;border:1px solid var(--border);background:var(--surface);min-width:46px;text-align:center;transition:.15s}
+.pspeed:hover{border-color:var(--accent);color:#fff}
+/* 成品大唱机 */
+.player.showpiece{flex-direction:column;text-align:center;gap:16px;padding:8px 0 4px}
+.player.showpiece .deck .vinyl{--vs:158px}
+.player.showpiece .pbody{align-items:center;width:100%;max-width:340px;margin:0 auto}
+.ptitle{font-family:var(--serif-sc);font-size:19px;color:var(--t0);font-weight:500}
+.psubt{font-family:var(--mono);font-size:11px;color:var(--t3);margin-top:-2px}
+.player.showpiece .pctrl{justify-content:center}
+
+/* ============================================================
+   顶栏 + 招牌
+   ============================================================ */
+.topbar{position:sticky;top:0;z-index:50;backdrop-filter:blur(16px) saturate(140%);-webkit-backdrop-filter:blur(16px) saturate(140%);
+  background:linear-gradient(180deg,rgba(11,10,13,.84),rgba(11,10,13,.42));border-bottom:1px solid var(--border)}
+.topbar .in{max-width:var(--maxw);margin:0 auto;padding:14px 28px;display:flex;align-items:center;gap:14px}
+.wordmark{font-family:var(--serif);font-size:21px;font-weight:500;letter-spacing:.01em;color:var(--t0);display:flex;align-items:center;gap:11px}
+.wordmark .seal{width:30px;height:30px;border-radius:50%;position:relative;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),0 2px 8px rgba(0,0,0,.5);
+  background:repeating-radial-gradient(circle at 50% 50%,#070709 0 1px,#23232a 1px 2.4px),radial-gradient(circle,#0a0a0c 0 99%)}
+.wordmark .seal::after{content:"";position:absolute;inset:36%;border-radius:50%;background:linear-gradient(135deg,#a78bfa,#7c3aed)}
+.topbar .sp{flex:1}
+.topbar a.ghost{font-size:13.5px;color:var(--t2);padding:8px 14px;border-radius:99px;border:1px solid var(--border);transition:.18s;display:inline-flex;align-items:center;gap:8px}
+.topbar a.ghost:hover{color:var(--t0);border-color:var(--border-2);background:var(--surface)}
+.topbar a.ghost svg{width:16px;height:16px}
+
+.atelier{padding:62px 0 26px;display:grid;grid-template-columns:auto 1fr;gap:56px;align-items:center}
+@media(max-width:760px){.atelier{grid-template-columns:1fr;gap:30px;padding:42px 0 14px;text-align:center}}
+.atelier .stage{position:relative;display:grid;place-items:center;justify-self:center;--vs:clamp(188px,60vw,264px);width:var(--vs)}
+@media(min-width:761px){.atelier .stage{--vs:clamp(216px,25vw,264px)}}
+.atelier .vinyl{width:var(--vs)}
+.atelier .platter{position:absolute;inset:-8%;border-radius:50%;border:1px solid var(--border);background:radial-gradient(circle,rgba(167,139,250,.07),transparent 70%);z-index:-1}
+.atelier .mm{font-family:var(--serif);font-size:clamp(38px,6vw,66px);font-weight:600;color:#fff;letter-spacing:-.012em;line-height:1}
+.atelier .feat{font-family:var(--serif-sc);font-size:clamp(15px,2vw,18px);color:var(--t1);margin-top:18px;line-height:1.6}
+.atelier .ways{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+@media(max-width:760px){.atelier .ways{justify-content:center}}
+.atelier .ways span{font-family:var(--serif-sc);font-size:14px;color:var(--t1);padding:7px 15px;border-radius:99px;border:1px solid var(--border);background:var(--surface);display:inline-flex;align-items:center;gap:8px}
+.atelier .ways .wic{width:16px;height:16px;color:var(--brand)}
+.atelier .meta{font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;color:var(--t3);margin-top:20px}
+
+/* ============================================================
+   工作台
+   ============================================================ */
+.console{margin-top:42px;scroll-margin-top:84px}
+.tabs{display:flex;gap:6px;padding:8px;border-radius:var(--r-xl);border:1px solid var(--border);background:rgba(11,10,15,.55);
+  backdrop-filter:blur(12px);position:sticky;top:68px;z-index:20;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:1;min-width:max-content;display:flex;align-items:center;justify-content:center;gap:10px;padding:14px 20px;border-radius:18px;
+  font-family:var(--serif-sc);font-weight:500;font-size:16px;color:var(--t2);transition:.22s;white-space:nowrap}
+.tab .e{width:19px;height:19px;flex:none}.tab:hover{color:var(--t1)}
+.tab[aria-selected="true"]{color:#fff;background:linear-gradient(180deg,color-mix(in srgb,var(--ac) 24%,transparent),color-mix(in srgb,var(--ac) 9%,transparent));
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ac) 42%,transparent),0 10px 28px color-mix(in srgb,var(--ac) 18%,transparent)}
+.tab[data-c="convert"]{--ac:#4ade80}.tab[data-c="transcribe"]{--ac:#fbbf24}.tab[data-c="separate"]{--ac:#7aa2f7}.tab[data-c="vocal"]{--ac:#fb7299}
+
+.panels{margin-top:26px}
+.panel{display:none;animation:rise .5s cubic-bezier(.2,.7,.2,1)}
+.panel.active{display:block}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.panel-head{margin-bottom:26px;display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+.panel-head .kick{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent)}
+.panel-head h2{font-family:var(--serif-sc);font-size:30px;font-weight:500;color:var(--t0)}
+.panel-head p{flex-basis:100%;font-size:14px;color:var(--t2);margin-top:2px;max-width:640px}
+
+.work{display:grid;grid-template-columns:minmax(0,400px) minmax(0,1fr);gap:28px;align-items:start}
+@media(max-width:880px){.work{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:26px;box-shadow:0 24px 60px rgba(0,0,0,.32)}
+.card.warm{background:linear-gradient(180deg,var(--surface-2),var(--surface))}
+.card + .card{margin-top:20px}
+.card-h{font-family:var(--serif-sc);font-weight:500;font-size:15px;color:var(--t2);margin-bottom:20px;display:flex;align-items:center;gap:10px}
+.card-h .idx{font-family:var(--serif);font-style:italic;font-size:20px;color:var(--accent)}
+.field{margin-bottom:24px}.field:last-child{margin-bottom:0}
+.label{font-family:var(--serif-sc);font-size:15.5px;font-weight:500;color:var(--t0);margin-bottom:9px;display:flex;align-items:center;gap:8px}
+.label .opt-mark{font-size:12px;color:var(--t3);font-family:var(--sans)}
+.help{font-size:12.5px;color:var(--t2);line-height:1.6;margin-top:8px}
+.tech{font-family:var(--mono);font-size:10.5px;color:var(--t3);letter-spacing:.02em}
+
+.drop{position:relative;display:block;border:1.5px dashed var(--border-2);border-radius:var(--r-md);padding:30px 18px;text-align:center;transition:.22s;cursor:pointer;background:rgba(255,255,255,.01)}
+.drop:hover,.drop.drag{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 6%,transparent)}
+.drop .vinyl{--vs:60px;margin:0 auto 14px}
+.drop .t{font-family:var(--serif-sc);font-size:15px;font-weight:500;color:var(--t0)}
+.drop .s{font-size:12px;color:var(--t2);margin-top:3px}
+.drop .formats{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:13px}
+.drop .formats span{font-size:11px;color:var(--t1);background:var(--surface-3);border:1px solid var(--border);padding:2px 9px;border-radius:7px}
+
+.opts{display:grid;gap:10px}
+.opt{display:block;cursor:pointer}.opt input{position:absolute;opacity:0;pointer-events:none}
+.opt .box{display:flex;align-items:flex-start;gap:13px;padding:15px 17px;border-radius:var(--r-md);border:1px solid var(--border);background:var(--surface);transition:.18s}
+.opt:hover .box{border-color:var(--border-2);background:var(--surface-2)}
+.opt input:checked + .box{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 42%,transparent)}
+.opt .tick{width:18px;height:18px;border-radius:50%;border:2px solid var(--border-3);flex:none;margin-top:2px;display:grid;place-items:center;transition:.18s}
+.opt input:checked + .box .tick{border-color:var(--accent);background:var(--accent)}
+.opt input:checked + .box .tick::after{content:"";width:6px;height:6px;border-radius:50%;background:#fff}
+.opt .ot{font-family:var(--serif-sc);font-size:15px;font-weight:500;color:var(--t0)}
+.opt .od{font-size:12px;color:var(--t2);margin-top:2px;line-height:1.5}.opt .od .tech{margin-left:4px}
+
+.steps{display:grid;gap:11px}
+.step{display:block;cursor:pointer}.step input{position:absolute;opacity:0;pointer-events:none}
+.step .box{display:flex;align-items:center;gap:14px;padding:15px 17px;border-radius:var(--r-md);border:1px solid var(--border);background:var(--surface);transition:.18s}
+.step:hover .box{border-color:var(--border-2)}
+.step input:checked + .box{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.step .chk{width:22px;height:22px;border-radius:7px;border:2px solid var(--border-3);flex:none;display:grid;place-items:center;transition:.18s;color:#fff}
+.step input:checked + .box .chk{border-color:var(--accent);background:var(--accent)}
+.step .chk svg{width:13px;height:13px;opacity:0;transition:.15s}.step input:checked + .box .chk svg{opacity:1}
+.step .num{font-family:var(--serif);font-style:italic;font-size:19px;color:var(--accent);width:20px;text-align:center;flex:none}
+.step .st{font-family:var(--serif-sc);font-size:15px;font-weight:500;color:var(--t0)}
+.step .sd{font-size:12px;color:var(--t2);margin-top:1px}
+/* 清理模型(非二选一:两者都让人声更干净) */
+.cleanmodel{margin-top:13px;padding:14px 16px;border-radius:var(--r-md);border:1px solid var(--border);background:var(--surface)}
+.cm-label{font-family:var(--serif-sc);font-size:13px;color:var(--t1);font-weight:500}
+.cm-pills{display:flex;gap:8px;margin-top:9px}
+.cm-pills .mini{font-size:12.5px;color:var(--t2);padding:7px 14px;border-radius:99px;border:1px solid var(--border);background:var(--surface-2);cursor:pointer;transition:.15s;font-family:var(--serif-sc)}
+.cm-pills .mini.on{color:#fff;border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.cm-note{font-size:11.5px;color:var(--t3);line-height:1.55;margin-top:10px}
+
+.input{width:100%;padding:13px 16px;border-radius:var(--r-md);border:1px solid var(--border);background:var(--surface);color:var(--t0);font-size:15px;font-family:var(--serif-sc);transition:.18s}
+.input::placeholder{color:var(--t3)}
+.input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 20%,transparent);background:var(--surface-2)}
+
+.knob-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+.knob-head .kn{font-family:var(--serif-sc);font-size:15px;font-weight:500;color:var(--t0)}
+.knob-val{font-family:var(--serif);font-style:italic;font-size:18px;color:var(--accent)}
+.range{-webkit-appearance:none;appearance:none;width:100%;height:5px;border-radius:99px;outline:none;background:linear-gradient(90deg,var(--accent) 0 var(--fill,50%),var(--surface-3) var(--fill,50%) 100%)}
+.range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:20px;height:20px;border-radius:50%;cursor:pointer;background:#fff;border:4px solid var(--accent);box-shadow:0 3px 9px rgba(0,0,0,.4);transition:.12s}
+.range::-webkit-slider-thumb:hover{transform:scale(1.14)}
+.range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;cursor:pointer;background:#fff;border:4px solid var(--accent)}
+.knob-scale{display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-top:9px;font-family:var(--serif-sc)}
+
+.cast{width:100%;margin-top:6px;padding:17px;border-radius:var(--r-md);font-family:var(--serif-sc);font-weight:500;font-size:16.5px;color:#fff;
+  background:linear-gradient(135deg,var(--accent),var(--accent-2));position:relative;overflow:hidden;letter-spacing:.03em;
+  box-shadow:0 12px 32px color-mix(in srgb,var(--accent) 34%,transparent),inset 0 1px 0 rgba(255,255,255,.28);
+  display:flex;align-items:center;justify-content:center;gap:11px;transition:.2s}
+.cast:hover{transform:translateY(-2px);box-shadow:0 18px 42px color-mix(in srgb,var(--accent) 44%,transparent),inset 0 1px 0 rgba(255,255,255,.28)}
+.cast:active{transform:translateY(0)}.cast svg{width:18px;height:18px}
+.cast .shine{position:absolute;inset:0;background:linear-gradient(120deg,transparent 30%,rgba(255,255,255,.26) 50%,transparent 70%);transform:translateX(-100%);transition:.6s}
+.cast:hover .shine{transform:translateX(100%)}
+
+.whisper{display:flex;gap:11px;align-items:flex-start;font-size:12.5px;color:var(--t2);line-height:1.6;padding:14px 16px;border-radius:var(--r-md);
+  background:color-mix(in srgb,var(--accent) 5%,transparent);border:1px solid color-mix(in srgb,var(--accent) 18%,transparent);margin-top:6px}
+.whisper svg{width:16px;height:16px;color:var(--accent);flex:none;margin-top:2px}.whisper b{color:var(--t1);font-weight:500}
+.whisper.warn{background:color-mix(in srgb,#fbbf24 6%,transparent);border-color:color-mix(in srgb,#fbbf24 26%,transparent)}
+.whisper.warn svg{color:#fbbf24}
+
+.out-tabs{display:flex;gap:6px;padding:6px;background:rgba(11,10,15,.45);border:1px solid var(--border);border-bottom:0;border-radius:var(--r-lg) var(--r-lg) 0 0;flex-wrap:wrap}
+.out-tab{padding:9px 16px;border-radius:11px;font-family:var(--serif-sc);font-size:14px;font-weight:500;color:var(--t2);transition:.15s}
+.out-tab.on{color:#fff;background:var(--surface-3)}
+.out-body{border:1px solid var(--border);border-radius:0 0 var(--r-lg) var(--r-lg);background:var(--surface);min-height:440px;overflow:hidden}
+.out-pane{display:none;padding:26px}.out-pane.on{display:block}
+
+.done{display:flex;align-items:center;gap:14px;margin-bottom:22px}
+.done .seal{width:44px;height:44px;border-radius:50%;flex:none;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 15%,transparent);border:1px solid color-mix(in srgb,var(--accent) 38%,transparent)}
+.done .seal svg{width:20px;height:20px;color:var(--accent)}
+.done .dt{font-family:var(--serif-sc);font-size:18px;font-weight:500;color:var(--t0)}.done .dp{font-size:12px;color:var(--t2);margin-top:1px}
+.facts{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.fact{padding:9px 15px;border-radius:13px;border:1px solid var(--border);background:var(--surface)}
+.fact .fv{font-family:var(--serif);font-style:italic;font-size:19px;color:var(--t0)}.fact .fl{font-size:11px;color:var(--t2);margin-top:1px}
+.donelist{display:grid;gap:12px;margin-top:4px}
+.doneline{display:flex;align-items:center;gap:13px;font-family:var(--serif-sc);font-size:14.5px;color:var(--t1)}
+.doneline .d{width:24px;height:24px;border-radius:50%;flex:none;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}.doneline .d svg{width:13px;height:13px}
+
+.sheet{background:#f7f4ec;border-radius:var(--r-md);padding:26px 20px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.05);position:relative;overflow:auto}
+.sheet .tt{font-family:var(--serif);font-size:17px;color:#211e26;text-align:center;font-weight:500}
+.sheet .st{font-family:var(--serif);font-style:italic;text-align:center;color:#8a8390;font-size:12.5px;margin:3px 0 16px}
+.jianpu{font-family:var(--serif-sc);background:#f7f4ec;color:#211e26;border-radius:var(--r-md);padding:22px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.05);margin-top:14px}
+.jianpu .key{font-family:var(--serif);font-style:italic;font-size:13px;color:#8a8390;display:block;margin-bottom:12px}
+.jianpu .ln{font-size:24px;letter-spacing:.2em;display:flex;flex-wrap:wrap;gap:0 6px;align-items:center}.jianpu .bar{color:#c4bdc6;margin:0 5px}
+
+.grasp{display:flex;align-items:center;gap:22px;margin-bottom:24px}
+.ring{position:relative;width:96px;height:96px;flex:none}.ring svg{transform:rotate(-90deg)}
+.ring .pct{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--serif);font-style:italic;font-size:26px;color:var(--t0)}
+.grasp .gt{font-family:var(--serif-sc);font-size:17px;color:var(--t0);font-weight:500}
+.grasp .gd{font-size:13.5px;color:var(--t2);margin-top:5px;line-height:1.55}
+.listen .lh{font-family:var(--serif-sc);font-size:14.5px;color:var(--t0);margin-bottom:12px;font-weight:500}
+.spot{display:flex;align-items:center;gap:12px;padding:13px 16px;border-radius:var(--r-md);border:1px solid color-mix(in srgb,#fbbf24 28%,transparent);background:color-mix(in srgb,#fbbf24 7%,transparent);margin-bottom:9px}
+.spot .at{font-family:var(--serif);font-style:italic;font-size:16px;color:#fcd34d;flex:none;width:64px}
+.spot .sw{font-family:var(--serif-sc);font-size:13.5px;color:var(--t1)}
+
+.dl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:11px}
+.dl{display:flex;align-items:center;gap:12px;padding:13px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface);transition:.18s;cursor:pointer}
+.dl:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 6%,transparent);transform:translateY(-2px)}
+.dl .ft{width:38px;height:38px;border-radius:11px;flex:none;display:grid;place-items:center;font-family:var(--mono);font-size:9.5px;font-weight:600;color:#fff;letter-spacing:.02em}
+.dl .ft.score{background:linear-gradient(135deg,#a78bfa,#7c3aed)}.dl .ft.midi{background:linear-gradient(135deg,#f59e0b,#b45309)}
+.dl .ft.audio{background:linear-gradient(135deg,#4ade80,#16a34a)}.dl .ft.data{background:linear-gradient(135deg,#7aa2f7,#3b6fe0)}
+.dl .nm{font-family:var(--serif-sc);font-size:13.5px;color:var(--t0)}.dl .sz{font-size:11px;color:var(--t2);font-family:var(--mono)}.dl .arr{margin-left:auto;color:var(--t3)}
+
+details.help{border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface);overflow:hidden;margin-top:18px}
+details.help summary{list-style:none;cursor:pointer;padding:15px 17px;display:flex;align-items:center;gap:11px;font-family:var(--serif-sc);font-size:14px;font-weight:500;color:var(--t0)}
+details.help summary::-webkit-details-marker{display:none}details.help summary:hover{background:var(--surface-2)}
+details.help summary .q{font-family:var(--serif);font-style:italic;color:var(--accent);font-size:18px}
+details.help summary .chev{margin-left:auto;color:var(--t2);transition:.2s}details.help[open] summary .chev{transform:rotate(180deg)}
+details.help .body{padding:0 17px 18px}details.help .body .help{margin-top:0}
+.minitable{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+.minitable td{padding:9px 8px;border-bottom:1px solid var(--border);vertical-align:top}.minitable tr:last-child td{border-bottom:0}
+.minitable .a{font-family:var(--serif-sc);color:var(--t0);font-weight:500;white-space:nowrap}.minitable .b{color:var(--t2)}.minitable .b .tech{display:block;margin-top:2px}
+
+footer{margin-top:96px;border-top:1px solid var(--border);padding:60px 0 44px;background:linear-gradient(180deg,transparent,rgba(11,10,15,.55))}
+.foot-top{display:flex;justify-content:space-between;gap:40px;flex-wrap:wrap;margin-bottom:40px}
+.foot-mani{max-width:440px}.foot-mani .wordmark{margin-bottom:16px}
+.foot-mani p{font-size:14px;color:var(--t2);line-height:1.7}
+.foot-credits h5{font-family:var(--serif-sc);font-size:13px;color:var(--t2);margin-bottom:14px;font-weight:500;letter-spacing:.03em}
+.foot-credits p{font-size:12.5px;color:var(--t3);line-height:1.9}.foot-credits b{color:var(--t2);font-weight:500}
+.foot-legal{padding:22px 0 0;border-top:1px solid var(--border);display:grid;gap:9px}
+.foot-legal p{font-size:12.5px;color:var(--t2);line-height:1.7;max-width:800px}
+.foot-legal b{color:var(--t1);font-weight:500}
+.foot-legal a{color:var(--brand);text-decoration:underline;text-underline-offset:2px}
+.foot-legal a:hover{color:#c4b5fd}
+.foot-bottom{margin-top:22px;padding-top:22px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--t3)}
+.foot-bottom a{color:var(--t2);text-decoration:underline;text-underline-offset:2px}.foot-bottom a:hover{color:var(--brand)}
+
+@media(max-width:620px){
+  .vc-ins,.vc-knobs{grid-template-columns:1fr!important;gap:16px!important}
+  .work[style]{grid-template-columns:minmax(0,1fr)!important}
+  .tab{padding:12px 15px;font-size:14.5px}.tab .e{font-size:16px}
+  .grasp{flex-direction:column;align-items:flex-start;gap:14px}
+  .dl-grid{grid-template-columns:1fr}
+  .player{gap:12px}.player .deck .vinyl{--vs:78px}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="bg" aria-hidden="true"><span class="orb a"></span><span class="orb b"></span><span class="orb c"></span></div>
+
+<!-- 写实唱片标(SVG symbol,所有黑胶复用;颜色随 --accent 变) -->
+<svg width="0" height="0" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+  <defs>
+    <radialGradient id="vlblShade"><stop offset="46%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".46"/></radialGradient>
+    <radialGradient id="vlblHi" cx="39%" cy="29%" r="56%"><stop offset="0" stop-color="#fff" stop-opacity=".34"/><stop offset="58%" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <path id="vlblTop" d="M 20 50 A 30 30 0 0 1 80 50"/>
+    <path id="vlblBot" d="M 21.5 50 A 28.5 28.5 0 0 0 78.5 50"/>
+    <symbol id="vlbl" viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="49" fill="var(--accent,#a78bfa)"/>
+      <circle cx="50" cy="50" r="49" fill="url(#vlblShade)"/>
+      <g fill="none" stroke="#000" stroke-opacity=".24">
+        <circle cx="50" cy="50" r="46.5" stroke-width=".9"/><circle cx="50" cy="50" r="19.5" stroke-width=".8"/><circle cx="50" cy="50" r="17" stroke-width=".5"/>
+      </g>
+      <text font-family="Georgia,'Times New Roman',serif" font-weight="700" font-size="9" letter-spacing="1.6" fill="#000" fill-opacity=".58"><textPath href="#vlblTop" startOffset="50%" text-anchor="middle">MUSICMASTER</textPath></text>
+      <text font-family="Georgia,serif" font-weight="600" font-size="4.6" letter-spacing="1.7" fill="#000" fill-opacity=".4"><textPath href="#vlblBot" startOffset="50%" text-anchor="middle">HIGH FIDELITY RECORDING</textPath></text>
+      <circle cx="50" cy="50" r="49" fill="url(#vlblHi)"/>
+      <circle cx="50" cy="50" r="3.3" fill="#09090c"/>
+      <circle cx="50" cy="50" r="3.3" fill="none" stroke="#000" stroke-opacity=".55" stroke-width="1.1"/>
+      <circle cx="48.7" cy="48.7" r=".9" fill="#fff" fill-opacity=".3"/>
+    </symbol>
+    <!-- 能力图标(统一改用 SVG,替换 emoji) -->
+    <symbol id="ic-convert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8l-4 4 4 4M17 8l4 4-4 4M14 4l-4 16"/></symbol>
+    <symbol id="ic-transcribe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3M8.5 21h7"/></symbol>
+    <symbol id="ic-separate" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+    <symbol id="ic-vocal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6M8 5v14M12 8v8M16 4v16M20 10v4"/></symbol>
+  </defs>
+</svg>
+
+<header class="topbar">
+  <div class="in">
+    <div class="wordmark"><span class="seal" aria-hidden="true"></span>MusicMaster</div>
+    <div class="sp"></div>
+    <a class="ghost" href="https://github.com/Cohenjikan/MusicMaster" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49 0-.24-.01-.88-.01-1.73-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.55-1.14-4.55-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05a9.3 9.3 0 0 1 5 0c1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"/></svg>开源</a>
+  </div>
+</header>
+
+<main>
+<div class="wrap">
+
+  <!-- 招牌(无 slogan,纯名字 + 功能事实) -->
+  <section class="atelier">
+    <div class="stage">
+      <div class="platter" aria-hidden="true"></div>
+      <div class="vinyl spin" aria-hidden="true">
+        <div class="disc"></div><span class="gloss"></span>
+        <svg class="label" viewBox="0 0 100 100"><use href="#vlbl" width="100" height="100"></use></svg>
+        <div class="tonearm"><span class="pivot"></span><span class="arm"></span></div>
+      </div>
+    </div>
+    <div class="intro">
+      <h1 class="mm">MusicMaster</h1>
+      <p class="feat">人声分离 · 音频记谱 · 简谱⇄五线谱互译 · 修音换音色</p>
+      <div class="ways"><span><svg class="wic" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-separate"></use></svg>拆声</span><span><svg class="wic" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-transcribe"></use></svg>记谱</span><span><svg class="wic" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-convert"></use></svg>互译</span><span><svg class="wic" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-vocal"></use></svg>重塑</span></div>
+      <p class="meta">本地运行 · 开源 · 整合多个一线开源模型</p>
+    </div>
+  </section>
+
+  <section class="console" id="console" data-accent="convert">
+    <div class="tabs" role="tablist" aria-label="四种手艺">
+      <button class="tab" data-c="convert"    id="tab-convert"    role="tab" aria-selected="true"  aria-controls="p-convert"><svg class="e" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-convert"></use></svg>互译</button>
+      <button class="tab" data-c="transcribe" id="tab-transcribe" role="tab" aria-selected="false" aria-controls="p-transcribe"><svg class="e" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-transcribe"></use></svg>记谱</button>
+      <button class="tab" data-c="separate"   id="tab-separate"   role="tab" aria-selected="false" aria-controls="p-separate"><svg class="e" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-separate"></use></svg>拆声</button>
+      <button class="tab" data-c="vocal"      id="tab-vocal"      role="tab" aria-selected="false" aria-controls="p-vocal"><svg class="e" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-vocal"></use></svg>重塑</button>
+    </div>
+
+    <div class="panels">
+
+      <!-- ───────── 互译 ───────── -->
+      <div class="panel active" id="p-convert" role="tabpanel" aria-labelledby="tab-convert" tabindex="0">
+        <div class="panel-head"><span class="kick">TRANSLATE</span><h2>简谱 ⇄ 五线谱</h2>
+          <p>两种谱式互相翻译,以 music21 为枢轴,往返无损。也支持把已有的谱直接导入。</p></div>
+        <div class="work">
+          <div>
+            <div class="card warm">
+              <div class="card-h"><span class="idx">i.</span>放上一份谱</div>
+              <div class="field">
+                <label class="drop" data-drop><input type="file" hidden>
+                  <span class="vinyl" aria-hidden="true"><span class="disc"></span><span class="gloss"></span><svg class="label" viewBox="0 0 100 100"><use href="#vlbl" width="100" height="100"></use></svg></span>
+                  <div class="t">把谱放上唱机</div><div class="s">简谱文本 · 或五线谱文件</div>
+                  <div class="formats"><span>.jianpu</span><span>.musicxml</span><span>.mid</span><span>.abc</span></div>
+                </label>
+              </div>
+              <div class="field"><div class="label">往哪个方向翻</div>
+                <div class="opts" role="radiogroup">
+                  <label class="opt"><input type="radio" name="cv" value="j2s" checked><span class="box"><span class="tick"></span><span><span class="ot">简谱 → 五线谱</span><span class="od">数字谱(1234567)译成五线谱,并现场誊写预览</span></span></span></label>
+                  <label class="opt"><input type="radio" name="cv" value="s2j"><span class="box"><span class="tick"></span><span><span class="ot">五线谱 → 简谱</span><span class="od">五线谱译回数字谱文本</span></span></span></label>
+                </div></div>
+              <div class="field"><div class="label">主音<span class="opt-mark">选填</span></div>
+                <input class="input" placeholder="如 G · 留空便由它自己听出来">
+                <div class="help">只在「译成简谱」时用到:1 唱作哪个音。拿不准就空着。</div></div>
+              <button class="cast"><span class="shine"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 8l-4 4 4 4M17 8l4 4-4 4M14 4l-4 16" stroke-linecap="round" stroke-linejoin="round"/></svg>翻译</button>
+            </div>
+          </div>
+          <div>
+            <div class="out-tabs" data-outtabs><button class="out-tab on">誊写</button><button class="out-tab">谱面</button><button class="out-tab">带走</button></div>
+            <div class="out-body">
+              <div class="out-pane on">
+                <div class="done"><span class="seal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><div class="dt">已译成五线谱</div><div class="dp">小星星 · 一个音都没丢</div></div></div>
+                <div class="facts"><div class="fact"><div class="fv">6</div><div class="fl">小节</div></div><div class="fact"><div class="fv">42</div><div class="fl">音符</div></div><div class="fact"><div class="fv">4/4</div><div class="fl">拍号</div></div><div class="fact"><div class="fv">C</div><div class="fl">大调</div></div></div>
+                <div class="whisper"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l10-2v11" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="2.4"/><circle cx="16" cy="16" r="2.4"/></svg><span>已为你现场誊好五线谱,翻到「谱面」看看。</span></div>
+              </div>
+              <div class="out-pane">
+                <div class="sheet">
+                  <div class="tt">Twinkle, Twinkle, Little Star</div><div class="st">C 大调 · 4/4</div>
+                  <svg viewBox="0 0 680 170" width="100%" preserveAspectRatio="xMidYMid meet" font-family="'Cambria Math',serif">
+                    <g stroke="#211e26" stroke-width="1.3"><line x1="30" y1="50" x2="650" y2="50"/><line x1="30" y1="68" x2="650" y2="68"/><line x1="30" y1="86" x2="650" y2="86"/><line x1="30" y1="104" x2="650" y2="104"/><line x1="30" y1="122" x2="650" y2="122"/></g>
+                    <g stroke="#211e26" stroke-width="1.6"><line x1="30" y1="50" x2="30" y2="122"/><line x1="350" y1="50" x2="350" y2="122"/><line x1="648" y1="50" x2="648" y2="122"/></g>
+                    <text x="40" y="116" font-size="74" fill="#211e26">&#119070;</text>
+                    <text x="92" y="76" font-size="30" font-weight="700" fill="#211e26">4</text><text x="92" y="118" font-size="30" font-weight="700" fill="#211e26">4</text>
+                    <g fill="#211e26">
+                      <line x1="132" y1="131" x2="158" y2="131" stroke="#211e26" stroke-width="1.3"/><ellipse cx="145" cy="131" rx="8" ry="6" transform="rotate(-18 145 131)"/><rect x="152" y="96" width="1.8" height="35"/>
+                      <line x1="187" y1="131" x2="213" y2="131" stroke="#211e26" stroke-width="1.3"/><ellipse cx="200" cy="131" rx="8" ry="6" transform="rotate(-18 200 131)"/><rect x="207" y="96" width="1.8" height="35"/>
+                      <ellipse cx="255" cy="104" rx="8" ry="6" transform="rotate(-18 255 104)"/><rect x="262" y="69" width="1.8" height="35"/>
+                      <ellipse cx="310" cy="104" rx="8" ry="6" transform="rotate(-18 310 104)"/><rect x="317" y="69" width="1.8" height="35"/>
+                      <ellipse cx="405" cy="95" rx="8" ry="6" transform="rotate(-18 405 95)"/><rect x="412" y="60" width="1.8" height="35"/>
+                      <ellipse cx="470" cy="95" rx="8" ry="6" transform="rotate(-18 470 95)"/><rect x="477" y="60" width="1.8" height="35"/>
+                      <ellipse cx="560" cy="104" rx="8.5" ry="6.2" transform="rotate(-18 560 104)" fill="none" stroke="#211e26" stroke-width="2"/><rect x="567" y="69" width="1.8" height="35"/>
+                    </g>
+                    <path d="M255 92 Q282 80 310 92" fill="none" stroke="#211e26" stroke-width="1.2"/><path d="M405 83 Q437 71 470 83" fill="none" stroke="#211e26" stroke-width="1.2"/>
+                  </svg>
+                </div>
+                <div class="jianpu"><span class="key">1 = C · 4/4 · 同一首,数字谱的样子</span><div class="ln"><span>1</span><span>1</span><span>5</span><span>5</span><span class="bar">|</span><span>6</span><span>6</span><span>5</span><span style="color:#c4bdc6">—</span></div></div>
+              </div>
+              <div class="out-pane"><div class="dl-grid">
+                <div class="dl"><span class="ft score">XML</span><span><div class="nm">twinkle.musicxml</div><div class="sz">14.2 KB</div></span><span class="arr">↓</span></div>
+                <div class="dl"><span class="ft data">SVG</span><span><div class="nm">谱面.svg</div><div class="sz">9.7 KB</div></span><span class="arr">↓</span></div>
+              </div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ───────── 记谱 ───────── -->
+      <div class="panel" id="p-transcribe" role="tabpanel" aria-labelledby="tab-transcribe" tabindex="0">
+        <div class="panel-head"><span class="kick">LISTEN</span><h2>把唱过的,记成谱</h2>
+          <p>放一段清唱或哼唱,誊成五线谱与简谱;并逐音标出它没太听准、想请你复核的地方。</p></div>
+        <div class="work">
+          <div>
+            <div class="card warm">
+              <div class="card-h"><span class="idx">i.</span>放一段歌声</div>
+              <div class="field">
+                <div class="player" data-player data-dur="32">
+                  <div class="deck"><div class="vinyl"><div class="disc"></div><span class="gloss"></span><svg class="label" viewBox="0 0 100 100"><use href="#vlbl" width="100" height="100"></use></svg><div class="tonearm"><span class="pivot"></span><span class="arm"></span></div></div></div>
+                  <div class="pbody">
+                    <div class="pname">我的清唱.wav <span class="psub">哼唱</span></div>
+                    <div class="pbar" data-seek><span class="pfill"></span><span class="pthumb"></span></div>
+                    <div class="pctrl"><button class="pplay" aria-label="播放/暂停"></button><span class="ptime"></span><span class="pspacer"></span><button class="pspeed">1×</button></div>
+                  </div>
+                </div>
+              </div>
+              <div class="field"><div class="label">这是什么样的声音</div>
+                <div class="opts" role="radiogroup">
+                  <label class="opt"><input type="radio" name="tr" value="crepe" checked><span class="box"><span class="tick"></span><span><span class="ot">歌声 · 哼唱 · 单旋律</span><span class="od">一条线条的旋律,最拿手,还能出简谱<span class="tech">crepe</span></span></span></span></label>
+                  <label class="opt"><input type="radio" name="tr" value="basic-pitch"><span class="box"><span class="tick"></span><span><span class="ot">乐器 · 和弦 · 多个音</span><span class="od">同时响起的多个音<span class="tech">basic-pitch</span></span></span></span></label>
+                  <label class="opt"><input type="radio" name="tr" value="bytedance"><span class="box"><span class="tick"></span><span><span class="ot">干净的钢琴独奏</span><span class="od">清晰录制的真钢琴<span class="tech">bytedance</span></span></span></span></label>
+                </div></div>
+              <div class="field"><div class="label">调<span class="opt-mark">选填</span></div><input class="input" placeholder="如 C · 留空便由它自己定调"></div>
+              <button class="cast"><span class="shine"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4" stroke-linecap="round"/></svg>记谱</button>
+            </div>
+            <details class="help"><summary><span class="q">?</span>它怎么知道该用哪种耳朵<span class="chev">⌄</span></summary>
+              <div class="body"><table class="minitable">
+                <tr><td class="a">歌声 / 哼唱</td><td class="b">单旋律深度音高跟踪<span class="tech">CREPE · 纯 CPU · 出简谱+逐音可信度</span></td></tr>
+                <tr><td class="a">乐器 / 和弦</td><td class="b">通用复音音符检测<span class="tech">basic-pitch · 人声别用它</span></td></tr>
+                <tr><td class="a">真钢琴</td><td class="b">钢琴专用高分辨率<span class="tech">bytedance · 仅干净 44.1k</span></td></tr>
+              </table><div class="help">选错也不会出乱子——门口会先体检素材,听不准的地方会替你标出来。</div></div></details>
+          </div>
+          <div>
+            <div class="out-tabs" data-outtabs><button class="out-tab on">解读</button><button class="out-tab">谱面</button><button class="out-tab">带走</button></div>
+            <div class="out-body">
+              <div class="out-pane on">
+                <div class="grasp">
+                  <div class="ring"><svg width="96" height="96" viewBox="0 0 96 96"><circle cx="48" cy="48" r="42" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="7"/><circle cx="48" cy="48" r="42" fill="none" stroke="var(--accent)" stroke-width="7" stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="32"/></svg><span class="pct">88</span></div>
+                  <div><div class="gt">这一遍,我记得挺顺</div><div class="gd">整体把握不错。有三处我自己也犹豫了一下,想请你回去再听听——其余地方可以放心。</div></div>
+                </div>
+                <div class="listen"><div class="lh">想请你再听听这几处</div>
+                  <div class="spot"><span class="at">第 12 拍</span><span class="sw">这里音偏高了一点点,像是滑上去没站稳。</span></div>
+                  <div class="spot"><span class="at">29–31 拍</span><span class="sw">连着几个音,我和另一只耳朵的意见不太一致。</span></div>
+                  <div class="spot"><span class="at">第 44 拍</span><span class="sw">这一下我听得没把握,你确认下是不是这个音。</span></div>
+                </div>
+                <details class="help"><summary><span class="q">i</span>这份「把握」是怎么来的<span class="chev">⌄</span></summary>
+                  <div class="body"><div class="help">三层护栏:进门先用 librosa 体检录音的真实带宽(L1);转录后再用 CREPE 与 pyin 两种听法交叉验证、看成串调外与跟踪自信度,把存疑处逐音标出(L3)。调外 ≠ 错——真曲也有变化音,所以只标「存疑」,从不武断判错。</div></div></details>
+              </div>
+              <div class="out-pane">
+                <div class="sheet">
+                  <div class="tt">记下来的样子</div><div class="st">自动定调 · G 大调 · 橙圈是想请你再听的那一处</div>
+                  <svg viewBox="0 0 680 150" width="100%" preserveAspectRatio="xMidYMid meet" font-family="'Cambria Math',serif">
+                    <g stroke="#211e26" stroke-width="1.3"><line x1="30" y1="40" x2="650" y2="40"/><line x1="30" y1="58" x2="650" y2="58"/><line x1="30" y1="76" x2="650" y2="76"/><line x1="30" y1="94" x2="650" y2="94"/><line x1="30" y1="112" x2="650" y2="112"/></g>
+                    <g stroke="#211e26" stroke-width="1.6"><line x1="30" y1="40" x2="30" y2="112"/><line x1="648" y1="40" x2="648" y2="112"/></g>
+                    <text x="40" y="106" font-size="74" fill="#211e26">&#119070;</text><text x="96" y="64" font-size="26" fill="#211e26">&#9839;</text>
+                    <g fill="#211e26">
+                      <ellipse cx="150" cy="94" rx="8" ry="6" transform="rotate(-18 150 94)"/><rect x="157" y="59" width="1.7" height="35"/>
+                      <ellipse cx="210" cy="85" rx="8" ry="6" transform="rotate(-18 210 85)"/><rect x="217" y="50" width="1.7" height="35"/>
+                      <ellipse cx="270" cy="76" rx="8" ry="6" transform="rotate(-18 270 76)"/><rect x="277" y="41" width="1.7" height="35"/>
+                      <ellipse cx="330" cy="67" rx="8" ry="6" transform="rotate(-18 330 67)"/><rect x="337" y="40" width="1.7" height="29"/>
+                      <ellipse cx="390" cy="58" rx="8.5" ry="6.4" transform="rotate(-18 390 58)" fill="#d97706"/><rect x="397" y="40" width="1.7" height="20" fill="#d97706"/>
+                      <ellipse cx="450" cy="76" rx="8" ry="6" transform="rotate(-18 450 76)"/><rect x="457" y="41" width="1.7" height="35"/>
+                      <ellipse cx="510" cy="85" rx="8" ry="6" transform="rotate(-18 510 85)"/><rect x="517" y="50" width="1.7" height="35"/>
+                      <ellipse cx="570" cy="94" rx="8.5" ry="6.2" transform="rotate(-18 570 94)" fill="none" stroke="#211e26" stroke-width="2"/><rect x="577" y="59" width="1.7" height="35"/>
+                    </g>
+                    <circle cx="390" cy="58" r="15" fill="none" stroke="#d97706" stroke-width="1.5" stroke-dasharray="3 3"/>
+                  </svg>
+                </div>
+              </div>
+              <div class="out-pane"><div class="dl-grid">
+                <div class="dl"><span class="ft data">JSON</span><span><div class="nm">音符.json</div><div class="sz">6.1 KB</div></span><span class="arr">↓</span></div>
+                <div class="dl"><span class="ft midi">MIDI</span><span><div class="nm">旋律.mid</div><div class="sz">2.3 KB</div></span><span class="arr">↓</span></div>
+                <div class="dl"><span class="ft score">XML</span><span><div class="nm">五线谱.musicxml</div><div class="sz">11.8 KB</div></span><span class="arr">↓</span></div>
+                <div class="dl"><span class="ft midi">PDF</span><span><div class="nm">简谱.pdf</div><div class="sz">28 KB</div></span><span class="arr">↓</span></div>
+              </div>
+              <div class="whisper" style="margin-top:14px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" stroke-linejoin="round"/></svg><span>简谱想出成 PDF 需本机有 LilyPond;没有也不要紧,会留下可印的源稿。</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ───────── 拆声 ───────── -->
+      <div class="panel" id="p-separate" role="tabpanel" aria-labelledby="tab-separate" tabindex="0">
+        <div class="panel-head"><span class="kick">UNWEAVE</span><h2>把一首歌,拆成几束声音</h2>
+          <p>人声、伴奏、和声、杂音本是缠在一起的,三段级联把它们一束束分开。</p></div>
+        <div class="work">
+          <div>
+            <div class="card warm">
+              <div class="card-h"><span class="idx">i.</span>放上整首歌</div>
+              <div class="field">
+                <div class="player" data-player data-dur="228">
+                  <div class="deck"><div class="vinyl"><div class="disc"></div><span class="gloss"></span><svg class="label" viewBox="0 0 100 100"><use href="#vlbl" width="100" height="100"></use></svg><div class="tonearm"><span class="pivot"></span><span class="arm"></span></div></div></div>
+                  <div class="pbody">
+                    <div class="pname">原曲.mp3 <span class="psub">完整混音</span></div>
+                    <div class="pbar" data-seek><span class="pfill"></span><span class="pthumb"></span></div>
+                    <div class="pctrl"><button class="pplay" aria-label="播放/暂停"></button><span class="ptime"></span><span class="pspacer"></span><button class="pspeed">1×</button></div>
+                  </div>
+                </div>
+              </div>
+              <div class="field"><div class="label">想拆到哪一步</div>
+                <div class="steps">
+                  <label class="step"><input type="checkbox" checked><span class="box"><span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="num">i</span><span><span class="st">分出人声与伴奏</span><span class="sd">最基本的一步</span></span></span></label>
+                  <label class="step"><input type="checkbox" checked><span class="box"><span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="num">ii</span><span><span class="st">只留主唱</span><span class="sd">去掉和声 / 合音</span></span></span></label>
+                  <label class="step"><input type="checkbox" checked><span class="box"><span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="num">iii</span><span><span class="st">洗净杂音</span><span class="sd">让人声更干净</span></span></span></label>
+                </div>
+                <div class="cleanmodel">
+                  <span class="cm-label">「洗净杂音」用哪个清理模型</span>
+                  <div class="cm-pills"><button class="mini on" data-val="dereverb">去混响 · 默认</button><button class="mini" data-val="deecho">去回声</button></div>
+                  <p class="cm-note">两者都为让人声更干净,不是「二选一去掉某种东西」。默认模型(UVR-DeEcho-DeReverb)已能同时压掉残响与回声;只有原录音回声特别重时,才需换成另一个。</p>
+                </div>
+              </div>
+              <button class="cast"><span class="shine"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h3l3-8 4 16 3-8h5" stroke-linecap="round" stroke-linejoin="round"/></svg>开始拆</button>
+            </div>
+            <div class="whisper"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-linejoin="round"/></svg><span>「去掉和声、只留主唱」是普通分离没有的一步——由专门的去和声模型完成(本项目用的是开源 Karaoke RoFormer)。</span></div>
+          </div>
+          <div>
+            <div class="out-tabs" data-outtabs><button class="out-tab on">几束声音</button><button class="out-tab">带走</button></div>
+            <div class="out-body">
+              <div class="out-pane on">
+                <div class="done"><span class="seal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><div class="dt">拆好了 · 四束声音</div><div class="dp">一束束,各自干净</div></div></div>
+                <div class="player" data-player data-dur="228" style="margin-bottom:18px">
+                  <div class="deck"><div class="vinyl"><div class="disc"></div><span class="gloss"></span><svg class="label" viewBox="0 0 100 100"><use href="#vlbl" width="100" height="100"></use></svg><div class="tonearm"><span class="pivot"></span><span class="arm"></span></div></div></div>
+                  <div class="pbody"><div class="pname">干净主唱 <span class="psub">去了和声 · 洗净了杂音</span></div>
+                    <div class="pbar" data-seek><span class="pfill"></span><span class="pthumb"></span></div>
+                    <div class="pctrl"><button class="pplay" aria-label="播放/暂停"></button><span class="ptime"></span><span class="pspacer"></span><button class="pspeed">1×</button></div></div>
+                </div>
+                <div class="player" data-player data-dur="228" style="margin-bottom:18px">
+                  <div class="deck"><div class="vinyl"><div class="disc"></div><span class="gloss"></span><svg class="label" viewBox="0 0 100 100"><use href="#vlbl" width="100" height="100"></use></svg><div class="tonearm"><span class="pivot"></span><span class="arm"></span></div></div></div>
+                  <div class="pbody"><div class="pname">伴奏 <span class="psub">只剩乐器</span></div>
+                    <div class="pbar" data-seek><span class="pfill"></span><span class="pthumb"></span></div>
+                    <div class="pctrl"><button class="pplay" aria-label="播放/暂停"></button><span class="ptime"></span><span class="pspacer"></span><button class="pspeed">1×</button></div></div>
+                </div>
+                <div class="donelist">
+                  <div class="doneline"><span class="d"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>分出了人声与伴奏</div>
+                  <div class="doneline"><span class="d"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>抹去了和声,只留主唱</div>
+                  <div class="doneline"><span class="d"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>洗净了房间残响与回声</div>
+                </div>
+              </div>
+              <div class="out-pane"><div class="dl-grid">
+                <div class="dl"><span class="ft audio">WAV</span><span><div class="nm">主唱.wav</div><div class="sz">39 MB</div></span><span class="arr">↓</span></div>
+                <div class="dl"><span class="ft audio">WAV</span><span><div class="nm">伴奏.wav</div><div class="sz">41 MB</div></span><span class="arr">↓</span></div>
+                <div class="dl"><span class="ft audio">WAV</span><span><div class="nm">去和声.wav</div><div class="sz">38 MB</div></span><span class="arr">↓</span></div>
+                <div class="dl"><span class="ft audio">WAV</span><span><div class="nm">干净主唱.wav</div><div class="sz">38 MB</div></span><span class="arr">↓</span></div>
+              </div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ───────── 重塑 ───────── -->
+      <div class="panel" id="p-vocal" role="tabpanel" aria-labelledby="tab-vocal" tabindex="0">
+        <div class="panel-head"><span class="kick">RESHAPE</span><h2>让跑调的那一遍,变好听</h2>
+          <p>两段式:先修音准,再以你自己的声音重生成。成品在调、干净,且仍是你的音色。</p></div>
+        <div class="work" style="grid-template-columns:minmax(0,1fr)">
+          <div class="card warm">
+            <div class="card-h"><span class="idx">i.</span>给它三样东西</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:15px" class="vc-ins">
+              <label class="drop" data-drop><input type="file" hidden><span class="vinyl" aria-hidden="true"><span class="disc"></span><span class="gloss"></span><svg class="label" viewBox="0 0 100 100"><use href="#vlbl" width="100" height="100"></use></svg></span><div class="t">你的原唱</div><div class="s">跑调也没关系</div></label>
+              <label class="drop" data-drop><input type="file" hidden><span class="vinyl" aria-hidden="true"><span class="disc"></span><span class="gloss"></span><svg class="label" viewBox="0 0 100 100"><use href="#vlbl" width="100" height="100"></use></svg></span><div class="t">想唱成的样子</div><div class="s">干净的目标旋律</div></label>
+              <label class="drop" data-drop><input type="file" hidden><span class="vinyl" aria-hidden="true"><span class="disc"></span><span class="gloss"></span><svg class="label" viewBox="0 0 100 100"><use href="#vlbl" width="100" height="100"></use></svg></span><div class="t">你的声音样本</div><div class="s">一段干净清唱 ~10–30s</div></label>
+            </div>
+            <div class="whisper warn" style="margin-top:16px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" stroke-linejoin="round"/></svg><span><b>务必逐句对齐:</b>「你的原唱」要和「想唱成的样子」在 <b>总时长、每句歌词的起止时间、节奏型</b> 上完全一致——唱快唱慢、断句或换气不同,都会让修音错位。先用同一段、卡同样的节拍录。</span></div>
+            <div class="whisper" style="margin-top:12px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5v14" stroke-linecap="round"/></svg><span>「想唱成的样子」请先<b>去掉和声</b>(可在「拆声」里得到 clean / lead),别直接用整首原曲。「声音样本」约 <b>10–30s</b> 干净清唱即可(超过 30s 会自动截取)。</span></div>
+          </div>
+          <div class="card">
+            <div class="card-h"><span class="idx">ii.</span>三个旋钮</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:30px" class="vc-knobs">
+              <div><div class="knob-head"><span class="kn">音准精修</span><span class="knob-val" data-valfor="cs">150</span></div><input class="range" type="range" min="50" max="200" step="10" value="150" data-slider="cs"><div class="knob-scale"><span>快一点</span><span>更精细</span></div><div class="help"><span class="tech">扩散步数 50–200</span> · 想快可降到 50</div></div>
+              <div><div class="knob-head"><span class="kn">音色细腻度</span><span class="knob-val" data-valfor="vs">50</span></div><input class="range" type="range" min="20" max="100" step="10" value="50" data-slider="vs"><div class="knob-scale"><span>快一点</span><span>更细腻</span></div><div class="help"><span class="tech">重塑步数 20–100</span> · 25 也够用</div></div>
+              <div><div class="knob-head"><span class="kn">贴近你的声音</span><span class="knob-val" data-valfor="cfg">0.7</span></div><input class="range" type="range" min="0" max="1" step="0.1" value="0.7" data-slider="cfg"><div class="knob-scale"><span>0</span><span>1</span></div><div class="help"><span class="tech">cfg · 效果较细微</span> · 设 0 最快</div></div>
+            </div>
+            <button class="cast" style="margin-top:26px"><span class="shine"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M5 8a4 4 0 014-4M19 16a4 4 0 01-4 4" stroke-linecap="round"/></svg>修音 · 重塑</button>
+
+            <div class="player showpiece is-playing" data-player data-dur="30" style="margin-top:30px">
+              <div class="deck"><div class="vinyl"><div class="disc"></div><span class="gloss"></span><svg class="label" viewBox="0 0 100 100"><use href="#vlbl" width="100" height="100"></use></svg><div class="tonearm"><span class="pivot"></span><span class="arm"></span></div></div></div>
+              <div class="pbody">
+                <div class="ptitle">在调了 · 干净了 · 还是你</div><div class="psubt">成品 · final.wav</div>
+                <div class="pbar" data-seek><span class="pfill"></span><span class="pthumb"></span></div>
+                <div class="pctrl"><button class="pplay" aria-label="播放/暂停"></button><span class="ptime"></span><button class="pspeed">1×</button></div>
+              </div>
+            </div>
+            <div class="player" data-player data-dur="30" style="margin-top:18px">
+              <div class="deck"><div class="vinyl"><div class="disc"></div><span class="gloss"></span><svg class="label" viewBox="0 0 100 100"><use href="#vlbl" width="100" height="100"></use></svg><div class="tonearm"><span class="pivot"></span><span class="arm"></span></div></div></div>
+              <div class="pbody"><div class="pname">中间产物 <span class="psub">只修了音准,还没换音色</span></div>
+                <div class="pbar" data-seek><span class="pfill"></span><span class="pthumb"></span></div>
+                <div class="pctrl"><button class="pplay" aria-label="播放/暂停"></button><span class="ptime"></span><span class="pspacer"></span><button class="pspeed">1×</button></div></div>
+            </div>
+
+            <details class="help"><summary><span class="q">i</span>诚实说:「贴近你的声音」是个细微的旋钮<span class="chev">⌄</span></summary>
+              <div class="body"><div class="help">这一版用的模型里,这个旋钮(cfg)的官方定位就是「subtle / 细微」。真正强力的相似度旋钮要更新一代的模型才有,这里没上。<b style="color:var(--t1)">想更像你本人</b>:与其拉这个旋钮,不如换一段更干净、更长的「你的声音样本」,再把「音色细腻度」调高一些,效果明显得多。</div></div></details>
+            <div class="whisper" style="margin-top:14px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3" stroke-linecap="round"/></svg><span>整首会自动分块、完整重塑(不截断);但越长、越精细就越慢——整首高精度可能要二十分钟以上,先拿副歌试试更快。</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+</div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-top">
+      <div class="foot-mani">
+        <div class="wordmark"><span class="seal" aria-hidden="true"></span>MusicMaster</div>
+        <p>一体化音乐处理工具:人声分离 · 音频记谱 · 简谱⇄五线谱互译 · 修音换音色。纯本地运行,整合多个一线开源模型,开箱即用。</p>
+      </div>
+      <div class="foot-credits">
+        <h5>站在巨人的肩上</h5>
+        <p><b>拆声</b> audio-separator · BS-RoFormer · UVR<br><b>记谱</b> CREPE · basic-pitch · music21<br><b>誊谱</b> Verovio · jianpu-ly · LilyPond<br><b>重塑</b> DiffPitcher · BigVGAN · Seed-VC</p>
+      </div>
+    </div>
+    <div class="foot-legal">
+      <p><b>授权</b>:MusicMaster 代码以 <a href="https://github.com/Cohenjikan/MusicMaster/blob/main/LICENSE" target="_blank" rel="noopener">Apache-2.0</a> 开源。但部分<b>模型权重</b>(去和声 Karaoke RoFormer、钢琴 ByteDance MAESTRO、Demucs MUSDB18 等)为 <b>CC-BY-NC-SA(非商用)</b>——个人 / 研究可自由使用;<b>商用前须替换为可商用权重或单独取得授权</b>。完整组件、许可证与角色见 <a href="https://github.com/Cohenjikan/MusicMaster/blob/main/NOTICE" target="_blank" rel="noopener">NOTICE</a>。</p>
+      <p><b>使用须知</b>:请仅上传与处理你<b>拥有权利或已获授权</b>的音频。</p>
+    </div>
+    <div class="foot-bottom">
+      <span>MusicMaster · 开源项目 · 代码 <a href="https://github.com/Cohenjikan/MusicMaster/blob/main/LICENSE" target="_blank" rel="noopener">Apache-2.0</a> · 权重见 <a href="https://github.com/Cohenjikan/MusicMaster/blob/main/NOTICE" target="_blank" rel="noopener">NOTICE</a></span>
+      <span>以众多优秀开源项目与模型为材料,在此一并致谢。</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  'use strict';
+  var PLAY='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+  var PAUSE='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
+
+  /* 主 Tab + 主色 */
+  var consoleEl=document.querySelector('.console');
+  var tabs=[].slice.call(document.querySelectorAll('.tab'));
+  var map={convert:'p-convert',transcribe:'p-transcribe',separate:'p-separate',vocal:'p-vocal'};
+  function pick(tab){
+    tabs.forEach(function(t){t.setAttribute('aria-selected',t===tab?'true':'false');});
+    var c=tab.dataset.c;consoleEl.setAttribute('data-accent',c);
+    Object.keys(map).forEach(function(k){var el=document.getElementById(map[k]);if(el)el.classList.toggle('active',k===c);});
+  }
+  tabs.forEach(function(tab,i){
+    tab.addEventListener('click',function(){pick(tab);});
+    tab.addEventListener('keydown',function(e){if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();
+      var n=tabs[(i+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length];n.focus();pick(n);}});
+  });
+
+  /* 产出子标签 */
+  document.querySelectorAll('[data-outtabs]').forEach(function(g){
+    var btns=[].slice.call(g.querySelectorAll('.out-tab'));
+    var panes=g.nextElementSibling?[].slice.call(g.nextElementSibling.querySelectorAll('.out-pane')):[];
+    btns.forEach(function(b,i){b.addEventListener('click',function(){
+      btns.forEach(function(x){x.classList.remove('on');});b.classList.add('on');
+      panes.forEach(function(p,j){p.classList.toggle('on',i===j);});});});
+  });
+
+  /* 音频唱机:播放/暂停(唱臂落下+黑胶转)· 进度可拖动 · 倍速 */
+  function fmt(s){s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+('0'+(s%60)).slice(-2);}
+  document.querySelectorAll('[data-player]').forEach(function(p){
+    var dur=parseFloat(p.dataset.dur||'0');
+    var play=p.querySelector('.pplay'),bar=p.querySelector('.pbar'),fill=p.querySelector('.pfill'),
+        thumb=p.querySelector('.pthumb'),time=p.querySelector('.ptime'),speed=p.querySelector('.pspeed'),vinyl=p.querySelector('.vinyl');
+    var playing=p.classList.contains('is-playing');
+    var pos=playing?0.32:0, speeds=[1,1.5,2], si=0, base=3.6;
+    function render(){var pct=(pos*100).toFixed(1);
+      if(fill)fill.style.width=pct+'%';if(thumb)thumb.style.left=pct+'%';
+      if(time)time.textContent=fmt(pos*dur)+' / '+fmt(dur);}
+    function setPlaying(on){playing=on;p.classList.toggle('is-playing',on);if(play)play.innerHTML=on?PAUSE:PLAY;}
+    if(play)play.addEventListener('click',function(){setPlaying(!playing);});
+    if(bar){
+      var dragging=false;
+      function seek(x){var r=bar.getBoundingClientRect();pos=Math.min(1,Math.max(0,(x-r.left)/r.width));render();}
+      bar.addEventListener('pointerdown',function(e){dragging=true;bar.classList.add('dragging');
+        try{bar.setPointerCapture(e.pointerId);}catch(_){}seek(e.clientX);e.preventDefault();});
+      bar.addEventListener('pointermove',function(e){if(dragging)seek(e.clientX);});
+      function stop(){dragging=false;bar.classList.remove('dragging');}
+      bar.addEventListener('pointerup',stop);bar.addEventListener('pointercancel',stop);
+      window.addEventListener('pointerup',stop);
+    }
+    if(speed)speed.addEventListener('click',function(){si=(si+1)%speeds.length;var v=speeds[si];
+      speed.textContent=v+'×';if(vinyl)vinyl.style.setProperty('--spin',(base/v).toFixed(2)+'s');});
+    render();setPlaying(playing);
+  });
+
+  /* 旋钮 */
+  document.querySelectorAll('[data-slider]').forEach(function(s){
+    function up(){var mn=parseFloat(s.min),mx=parseFloat(s.max),v=parseFloat(s.value);
+      s.style.setProperty('--fill',((v-mn)/(mx-mn)*100).toFixed(1)+'%');
+      var o=document.querySelector('[data-valfor="'+s.dataset.slider+'"]');
+      if(o)o.textContent=(s.step&&s.step.indexOf('.')>-1)?v.toFixed(1):v;}
+    s.addEventListener('input',up);up();
+  });
+
+  /* 拆声:清理模型(展示用,默认其一) */
+  document.querySelectorAll('.cm-pills').forEach(function(g){
+    var ms=[].slice.call(g.querySelectorAll('.mini'));
+    ms.forEach(function(m){m.addEventListener('click',function(){ms.forEach(function(x){x.classList.remove('on');});m.classList.add('on');});});
+  });
+
+  /* 拖拽视觉 */
+  document.querySelectorAll('[data-drop]').forEach(function(d){
+    ['dragenter','dragover'].forEach(function(ev){d.addEventListener(ev,function(e){e.preventDefault();d.classList.add('drag');});});
+    ['dragleave','drop'].forEach(function(ev){d.addEventListener(ev,function(e){e.preventDefault();d.classList.remove('drag');});});
+  });
+})();
+</script>
+<!-- 真实后端桥接:共享客户端 + 四部门各自模块(独立文件,避免并行接入冲突)。
+     这些脚本在上面的 UI 行为脚本之后加载,负责上传/提交/轮询/把真实结果填进面板。 -->
+<script src="js/api.js"></script>
+<script src="js/convert.js"></script>
+<script src="js/transcribe.js"></script>
+<script src="js/separate.js"></script>
+<script src="js/vocal.js"></script>
+</body>
+</html>

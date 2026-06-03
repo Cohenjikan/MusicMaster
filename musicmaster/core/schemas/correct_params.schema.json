@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://singer.dev/schemas/correct_params.schema.json",
+  "title": "M6 修音入参",
+  "description": "M6 修音重合成的可调参数。对应 §3 契约: (user.wav, target_f0_frames.json, params) -> corrected.wav",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "strength": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 1.0,
+      "description": "修正强度:0=完全保留原音准,1=完全贴合目标(在 log-f0 域线性插值)"
+    },
+    "preserve_vibrato": {
+      "type": "boolean",
+      "default": true,
+      "description": "是否保留颤音:对目标 f0 做低通,保留用户原有的快速基频波动(颤音/滑音)"
+    }
+  }
+}

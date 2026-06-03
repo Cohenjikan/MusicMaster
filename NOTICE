@@ -1,0 +1,123 @@
+MusicMaster
+Copyright 2026 MusicMaster contributors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+================================================================================
+本产品在运行时使用 / 集成以下第三方开源组件与模型。各组件版权归其作者所有,
+按其各自许可证分发。下表履行 Apache-2.0 §4(d) 的署名义务。
+许可证以各组件官方仓库为准;模型权重的训练数据许可可能与代码许可不同,
+商用前请自行复核(尤其标注 NC / 非商用 的项)。
+================================================================================
+
+──────────────── 人声分离(musicmaster.separate)────────────────
+- audio-separator — 统一分离推理后端(加载/下载/推理所有分离模型)
+    许可证: MIT
+    https://github.com/nomadkaraoke/python-audio-separator
+- BS-RoFormer (model_bs_roformer_ep_317_sdr_12.9755) — 第1段 人声/伴奏分离(保真最佳)
+    经 audio-separator 调用;模型权重许可见上游
+- Mel-Band RoFormer "Karaoke" (gabox_v2 / becruily / aufr33) — 第2段 去和声(去 backing vocals)
+    经 audio-separator 调用;权重经第三方分发,视作非商用,个人/研究使用
+- UVR-DeEcho-DeReverb / UVR-De-Echo-Normal — 第3段 降噪/去混响提纯
+    Ultimate Vocal Remover 系模型,经 audio-separator 调用
+- Demucs (htdemucs) — 备选人声分离(musicmaster.core.separate)
+    许可证: MIT(代码);权重训练于 MUSDB18(CC-BY-NC-SA)
+    https://github.com/facebookresearch/demucs
+
+──────────────── 扒谱(musicmaster.transcribe)────────────────
+- CREPE — 单旋律基频(f0)检测(默认引擎,含预训练权重)
+    许可证: MIT
+    https://github.com/marl/crepe
+- torchcrepe — PyTorch 版 CREPE(修音准的目标 f0 提取,锁主旋律抗和声)
+    许可证: MIT
+    https://github.com/maxrmorrison/torchcrepe
+- pYIN(经 librosa) — 概率 YIN 基频检测(轻量备选 f0)
+    许可证: ISC(随 librosa)
+- basic-pitch — 通用复音乐器转录(兜底引擎,含 ICASSP-2022 权重)
+    许可证: Apache-2.0(代码 + 权重)
+    https://github.com/spotify/basic-pitch
+- piano_transcription_inference (ByteDance) — 高分辨率钢琴复音转录
+    许可证: MIT(代码);权重训练于 MAESTRO(CC-BY-NC-SA,非商用)
+    https://github.com/qiuqiangkong/piano_transcription_inference
+- music21 — MusicXML 生成 / 解析 / 调号(扒谱与互转枢轴)
+    许可证: BSD-3-Clause
+    https://github.com/cuthbertLab/music21
+- pretty_midi — MIDI 读写
+    许可证: MIT
+    https://github.com/craffel/pretty-midi
+- librosa — 音频 IO / DSP / pyin / chroma / 节拍
+    许可证: ISC
+    https://github.com/librosa/librosa
+- Krumhansl-Schmuckler 调性轮廓算法 — 自动定调(公领域算法,内联实现)
+
+──────────────── 谱面渲染(musicmaster.core.render)────────────────
+- Verovio — 五线谱渲染 MusicXML → SVG(作为库加载,不静态链接)
+    许可证: LGPL-3.0
+    https://github.com/rism-digital/verovio
+- jianpu-ly — 简谱:MusicXML → LilyPond .ly(纯 Python,不需 LilyPond 二进制)
+    许可证: Apache-2.0
+    https://github.com/ssb22/jianpu-ly
+- LilyPond — 简谱出图:.ly → SVG/PDF(**仅作独立 CLI 子进程调用,绝不 import/链接**)
+    许可证: GPL-3.0(以子进程调用,输出文件不受 copyleft 传染)
+    https://lilypond.org
+
+──────────────── 修音准(musicmaster.vocal.correct,DiffPitcher)────────────────
+- DiffPitcher — 扩散式自动音高修正(template 模式,保音色只改音高)
+    许可证: MIT(权重训练数据出处建议使用前复核)
+    https://github.com/haidog-yaqub/DiffPitcher
+- BigVGAN — 神经声码器(mel → 波形)
+    许可证: MIT(NVIDIA)
+    https://github.com/NVIDIA/BigVGAN
+- WORLD / pyworld — 声码分析(mel / MCEP 特征)
+    许可证: 修改版 BSD / MIT
+    https://github.com/JeremyCCHsu/Python-Wrapper-for-World-Vocoder
+- fastdtw — 动态时间规整(参考 f0 对齐)
+    许可证: MIT
+- diffusers (Hugging Face) — DDIM 采样调度器
+    许可证: Apache-2.0
+    https://github.com/huggingface/diffusers
+
+──────────────── 换音色(musicmaster.vocal.voice,Seed-VC)────────────────
+- Seed-VC — 零样本歌声/音色转换(DiT + flow matching)
+    许可证: 见上游仓库
+    https://github.com/Plachtaa/seed-vc
+- OpenAI Whisper (whisper-small) — 语义特征(声纹无关音素表示)
+    许可证: MIT
+    https://github.com/openai/whisper
+- RMVPE(经 lj1995/VoiceConversionWebUI) — 基频提取
+    许可证: MIT
+- CAMPPlus(funasr) — 说话人风格嵌入(目标音色 embedding)
+    许可证: Apache-2.0
+- BigVGAN v2(NVIDIA) — 声码器
+    许可证: MIT
+
+──────────────── 界面 / 服务 / 工具 ────────────────
+- FastAPI / Starlette / Uvicorn / Pydantic — 本地 Web 界面与 REST API(托管设计稿前端 + 四功能端点,主入口 musicmaster.web.server)
+    许可证: MIT / BSD-3
+    https://github.com/fastapi/fastapi
+- python-multipart — 文件上传(multipart 表单)解析
+    许可证: Apache-2.0
+- numpy / scipy — 数值计算
+    许可证: BSD-3
+- FFmpeg(ffprobe) — 音频解码 / 容器元数据(经 librosa/audioread 及子进程)
+    许可证: LGPL/GPL(按 build;仅作解码/独立进程使用)
+
+──────────────── 界面字体(自托管 woff2,随前端分发)────────────────
+- Fraunces — 标题衬线可变字体(Latin 子集)
+    许可证: SIL Open Font License 1.1
+    https://github.com/undercasetype/Fraunces
+- Inter — 正文无衬线可变字体(Latin 子集)
+    许可证: SIL Open Font License 1.1
+    https://github.com/rsms/inter
+- JetBrains Mono — 等宽可变字体(技术名词标注用)
+    许可证: SIL Open Font License 1.1
+    https://github.com/JetBrains/JetBrainsMono
+  (各 OFL 全文随附 musicmaster/web/static/fonts/OFL-*.txt;中文走系统字体,不打包分发)
+
+================================================================================
+合规说明(履行各开源许可的署名义务;非法律意见):
+  • LilyPond / FFmpeg 仅以独立 CLI 子进程调用,绝不 import 或静态链接。
+  • Verovio(LGPL)作为动态库加载使用。
+  • 标注【非商用 / NC】的模型权重(Karaoke RoFormer、Demucs MUSDB18、ByteDance MAESTRO 等)
+    个人 / 研究可用;商用前需替换为可商用权重或单独取得授权。
+================================================================================

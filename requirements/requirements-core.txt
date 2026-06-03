@@ -1,0 +1,37 @@
+# ═══════════ MusicMaster 核心 CPU 依赖(GUI + 扒谱 + 互转 + 渲染)═══════════
+# 装在主 venv(CPU)。修音/换音色/分离是 GPU,各有独立 venv,见 requirements-vocal.txt / requirements-sep.txt。
+#
+# CREPE 安装注意(Windows):crepe 会把 tensorflow 当依赖,可能降级你的 TF。
+#   推荐:先装 tensorflow,再 `pip install --no-deps crepe`(scripts/setup_core 已按此处理)。
+
+numpy>=1.24,<2          # basic-pitch / TF 要求 numpy<2
+scipy>=1.10
+librosa>=0.10
+soundfile>=0.12
+pretty_midi>=0.2
+music21>=9.1            # 扒谱 MusicXML 生成 + 互转枢轴(BSD-3)
+
+# 谱面渲染
+verovio>=4.0            # 五线谱 → SVG(LGPL,作为库加载)
+jianpu-ly>=1.8          # 简谱 → LilyPond .ly(Apache;成图另需 LilyPond CLI,见 README)
+
+# 扒谱引擎(TF 后端)
+tensorflow==2.15.0      # CREPE / basic-pitch 后端(固定:唯一同时满足 basic-pitch<2.15.1 与 crepe)
+crepe                   # 单旋律 f0(MIT,含权重);建议 --no-deps 安装以免降级 TF
+hmmlearn>=0.3           # crepe --no-deps 漏装的依赖(viterbi 路径需要);补上使 pip check 干净
+basic-pitch>=0.3        # 通用复音乐器转录(Apache,含 ICASSP-2022 权重)
+
+# 本地 Web 界面(FastAPI 托管设计稿前端 + 四功能 REST 端点;主入口 musicmaster.web.server)
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9   # 文件上传(multipart 表单)解析
+
+# 开发/校验
+jsonschema>=4
+pytest>=7
+
+# 可选:钢琴复音(ByteDance 高分辨率,MAESTRO 权重)——与 TF 同 venv 需注意 torch 版本
+# piano-transcription-inference
+# torch
+
+# (httpx 仅测试用 TestClient,见 pyproject 的 [dev] extra;pydantic 随 fastapi 自动装)

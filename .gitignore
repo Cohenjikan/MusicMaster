@@ -1,0 +1,77 @@
+# ═══════════════ Python ═══════════════
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ═══════════════ Claude Code 本地配置(harness 工具/预览/会话,绝不入库) ═══════════════
+.claude/
+
+# ═══════════════ 虚拟环境(4 个 venv 都不入库) ═══════════════
+.venv/
+.venv-*/
+venv/
+env/
+
+# ═══════════════ 第三方 vendored 仓库(由 scripts/setup_* 重建,不入库) ═══════════════
+# DiffPitcher / seed-vc 源码与权重经 setup 脚本 clone+下载;只提交我们自己的 run 脚本
+vendor/DiffPitcher/
+vendor/seed-vc/
+.sep-models/
+
+# ═══════════════ ML 模型权重(绝不入库) ═══════════════
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.safetensors
+*.bin
+*.h5
+*.tflite
+ckpts/
+models/
+weights/
+*.tar.gz
+
+# ═══════════════ 音频 / 视频(测试素材多为版权,不入库) ═══════════════
+*.wav
+*.flac
+*.mp3
+*.mp4
+*.m4a
+*.aac
+*.ogg
+
+# 例外:保留体积很小的合成 fixtures / examples 样例(非版权,供联调与 GUI demo)
+!examples/**/*.wav
+!examples/**/*.mid
+!examples/**/*.midi
+!examples/**/*.jianpu
+!examples/**/*.musicxml
+
+# ═══════════════ 运行产物 ═══════════════
+output/
+out/
+outputs/
+_artifacts/
+_scratch/
+*.log
+gradio_cached_examples/
+
+# ═══════════════ 机器相关路径配置(不入库;用 paths.local.json.example 当模板) ═══════════════
+paths.local.json
+start_gui.log
+
+# ═══════════════ OS / IDE ═══════════════
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+_demo_vocal/

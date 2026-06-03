@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "musicmaster"
+version = "0.1.0"
+description = "一体化音乐处理:人声修音换音色 + 人声分离 + 音频扒谱(五线谱/简谱) + 简谱⇄五线谱互转。"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "MusicMaster contributors" }]
+keywords = [
+  "pitch-correction", "auto-tune", "voice-conversion", "singing",
+  "source-separation", "music-transcription", "jianpu", "musicxml", "audio",
+]
+
+# 基础(CPU):契约 + 互转 + 谱面渲染 + engine 人声 pyin 路径所需的最小集合。
+dependencies = [
+  "numpy>=1.24,<2",
+  "scipy>=1.10",
+  "librosa>=0.10",
+  "soundfile>=0.12",
+  "pretty_midi>=0.2",
+  "music21>=9.1",
+]
+
+[project.optional-dependencies]
+# 谱面渲染:五线谱(Verovio/LGPL,作为库) + 简谱(.ly 由 jianpu-ly/Apache 生成;成图另需 LilyPond CLI,非 pip)
+render = ["verovio>=4.0", "jianpu-ly>=1.8"]
+# 扒谱生产路径:CREPE(单旋律最优) + basic-pitch(复音兜底)。两者均 TF 后端。
+# ⚠️ Windows 上建议 `pip install --no-deps crepe` 以免 crepe 把 tensorflow 降级(见 README)。
+transcribe = ["crepe", "hmmlearn>=0.3", "tensorflow==2.15.0", "basic-pitch>=0.3"]
+# 钢琴复音(ByteDance 高分辨率;MAESTRO 权重,个人/研究用)。torch 与 TF 同 venv 需注意版本。
+bytedance = ["piano-transcription-inference", "torch>=2.0"]
+# 本地 Web GUI(FastAPI 托管设计稿前端 + 四功能 REST 端点;主入口 musicmaster.web.server)
+gui = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "python-multipart>=0.0.9"]
+dev = ["pytest>=7", "jsonschema>=4", "httpx>=0.27"]
+
+[project.scripts]
+musicmaster = "musicmaster.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["musicmaster*"]
+
+[tool.setuptools.package-data]
+"musicmaster.core" = ["schemas/*.json"]
+"musicmaster.web" = ["static/*", "static/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = [
+  "ignore::DeprecationWarning",
+  "ignore::UserWarning",
+]

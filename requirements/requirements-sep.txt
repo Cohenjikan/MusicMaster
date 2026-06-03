@@ -1,0 +1,11 @@
+# ═══════════ 人声分离(GPU,独立 venv:.venv-sep)═══════════
+# 三段式:BS-RoFormer 分离 → Karaoke gabox_v2 去和声 → UVR DeEcho-DeReverb 降噪。
+# 全部模型经 audio-separator 加载,权重首次运行自动下载(默认 C:\tmp\audio-separator-models,
+# 可用环境变量 MUSICMASTER_SEP_MODELS 覆盖)。
+#
+# torch/torchaudio 请按你的 CUDA 版本单独安装(本项目验证于 cu124):
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+audio-separator[gpu]
+soundfile>=0.12
+numpy>=1.24,<2
