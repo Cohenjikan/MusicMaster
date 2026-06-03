@@ -430,8 +430,8 @@ footer{margin-top:96px;border-top:1px solid var(--border);padding:60px 0 44px;ba
               </div>
               <div class="field"><div class="label">往哪个方向翻</div>
                 <div class="opts" role="radiogroup">
-                  <label class="opt"><input type="radio" name="cv" checked><span class="box"><span class="tick"></span><span><span class="ot">简谱 → 五线谱</span><span class="od">数字谱(1234567)译成五线谱,并现场誊写预览</span></span></span></label>
-                  <label class="opt"><input type="radio" name="cv"><span class="box"><span class="tick"></span><span><span class="ot">五线谱 → 简谱</span><span class="od">五线谱译回数字谱文本</span></span></span></label>
+                  <label class="opt"><input type="radio" name="cv" value="j2s" checked><span class="box"><span class="tick"></span><span><span class="ot">简谱 → 五线谱</span><span class="od">数字谱(1234567)译成五线谱,并现场誊写预览</span></span></span></label>
+                  <label class="opt"><input type="radio" name="cv" value="s2j"><span class="box"><span class="tick"></span><span><span class="ot">五线谱 → 简谱</span><span class="od">五线谱译回数字谱文本</span></span></span></label>
                 </div></div>
               <div class="field"><div class="label">主音<span class="opt-mark">选填</span></div>
                 <input class="input" placeholder="如 G · 留空便由它自己听出来">
@@ -498,9 +498,9 @@ footer{margin-top:96px;border-top:1px solid var(--border);padding:60px 0 44px;ba
               </div>
               <div class="field"><div class="label">这是什么样的声音</div>
                 <div class="opts" role="radiogroup">
-                  <label class="opt"><input type="radio" name="tr" checked><span class="box"><span class="tick"></span><span><span class="ot">歌声 · 哼唱 · 单旋律</span><span class="od">一条线条的旋律,最拿手,还能出简谱<span class="tech">crepe</span></span></span></span></label>
-                  <label class="opt"><input type="radio" name="tr"><span class="box"><span class="tick"></span><span><span class="ot">乐器 · 和弦 · 多个音</span><span class="od">同时响起的多个音<span class="tech">basic-pitch</span></span></span></span></label>
-                  <label class="opt"><input type="radio" name="tr"><span class="box"><span class="tick"></span><span><span class="ot">干净的钢琴独奏</span><span class="od">清晰录制的真钢琴<span class="tech">bytedance</span></span></span></span></label>
+                  <label class="opt"><input type="radio" name="tr" value="crepe" checked><span class="box"><span class="tick"></span><span><span class="ot">歌声 · 哼唱 · 单旋律</span><span class="od">一条线条的旋律,最拿手,还能出简谱<span class="tech">crepe</span></span></span></span></label>
+                  <label class="opt"><input type="radio" name="tr" value="basic-pitch"><span class="box"><span class="tick"></span><span><span class="ot">乐器 · 和弦 · 多个音</span><span class="od">同时响起的多个音<span class="tech">basic-pitch</span></span></span></span></label>
+                  <label class="opt"><input type="radio" name="tr" value="bytedance"><span class="box"><span class="tick"></span><span><span class="ot">干净的钢琴独奏</span><span class="od">清晰录制的真钢琴<span class="tech">bytedance</span></span></span></span></label>
                 </div></div>
               <div class="field"><div class="label">调<span class="opt-mark">选填</span></div><input class="input" placeholder="如 C · 留空便由它自己定调"></div>
               <button class="cast"><span class="shine"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4" stroke-linecap="round"/></svg>记谱</button>
@@ -588,7 +588,7 @@ footer{margin-top:96px;border-top:1px solid var(--border);padding:60px 0 44px;ba
                 </div>
                 <div class="cleanmodel">
                   <span class="cm-label">「洗净杂音」用哪个清理模型</span>
-                  <div class="cm-pills"><button class="mini on">去混响 · 默认</button><button class="mini">去回声</button></div>
+                  <div class="cm-pills"><button class="mini on" data-val="dereverb">去混响 · 默认</button><button class="mini" data-val="deecho">去回声</button></div>
                   <p class="cm-note">两者都为让人声更干净,不是「二选一去掉某种东西」。默认模型(UVR-DeEcho-DeReverb)已能同时压掉残响与回声;只有原录音回声特别重时,才需换成另一个。</p>
                 </div>
               </div>
@@ -784,5 +784,12 @@ footer{margin-top:96px;border-top:1px solid var(--border);padding:60px 0 44px;ba
   });
 })();
 </script>
+<!-- 真实后端桥接:共享客户端 + 四部门各自模块(独立文件,避免并行接入冲突)。
+     这些脚本在上面的 UI 行为脚本之后加载,负责上传/提交/轮询/把真实结果填进面板。 -->
+<script src="js/api.js"></script>
+<script src="js/convert.js"></script>
+<script src="js/transcribe.js"></script>
+<script src="js/separate.js"></script>
+<script src="js/vocal.js"></script>
 </body>
 </html>
