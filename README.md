@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎵 MusicMaster
+# 🎵 声谱坊 · MusicMaster
 
 **中文** · [English](README.en.md)
 
