@@ -182,11 +182,27 @@ def _parse_confidence(d: Path) -> tuple[Optional[int], Optional[list]]:
                     if isinstance(data.get(k), (int, float)):
                         pct = int(round(float(data[k]) * (100 if data[k] <= 1 else 1)))
                         break
-                raw_spots = data.get("spots") or data.get("suspect") or data.get("flagged")
+                # confidence.assess() 把存疑段放在 "passages":[{start_s,end_s,n,reasons[],min_conf}]
+                raw_spots = (data.get("passages") or data.get("spots")
+                             or data.get("suspect") or data.get("flagged"))
                 if isinstance(raw_spots, list):
                     spots = []
                     for s in raw_spots[:12]:
-                        if isinstance(s, dict):
+                        if not isinstance(s, dict):
+                            continue
+                        if "start_s" in s and "end_s" in s:  # assess 的 passage 结构
+                            reasons = s.get("reasons") or []
+                            why = "、".join(reasons) if isinstance(reasons, list) else str(reasons)
+                            n, mc = s.get("n"), s.get("min_conf")
+                            note = (f"{n}音 · " if n else "") + (why or "可信度偏低")
+                            if isinstance(mc, (int, float)):
+                                note += f"(最低可信 {mc:.2f})"
+                            try:
+                                at = f"{float(s['start_s']):.1f}–{float(s['end_s']):.1f}s"
+                            except (TypeError, ValueError):
+                                at = ""
+                            spots.append({"at": at, "note": note})
+                        else:
                             at = s.get("at") or s.get("time") or s.get("beat") or s.get("range") or ""
                             note = s.get("note") or s.get("reason") or s.get("desc") or ""
                             spots.append({"at": str(at), "note": str(note)})
