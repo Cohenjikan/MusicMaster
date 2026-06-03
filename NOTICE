@@ -92,16 +92,27 @@ Licensed under the Apache License, Version 2.0 (see LICENSE).
     许可证: MIT
 
 ──────────────── 界面 / 服务 / 工具 ────────────────
-- Gradio — 单页 Web GUI
-    许可证: Apache-2.0
-- FastAPI / Starlette / Uvicorn / Pydantic — 可选 server 模式(REST API)
+- FastAPI / Starlette / Uvicorn / Pydantic — 本地 Web 界面与 REST API(托管设计稿前端 + 四功能端点,主入口 musicmaster.web.server)
     许可证: MIT / BSD-3
-- Celery / Redis / boto3 — 可选队列与对象存储后端
-    许可证: BSD-3 / MIT / Apache-2.0
+    https://github.com/fastapi/fastapi
+- python-multipart — 文件上传(multipart 表单)解析
+    许可证: Apache-2.0
 - numpy / scipy — 数值计算
     许可证: BSD-3
 - FFmpeg(ffprobe) — 音频解码 / 容器元数据(经 librosa/audioread 及子进程)
     许可证: LGPL/GPL(按 build;仅作解码/独立进程使用)
+
+──────────────── 界面字体(自托管 woff2,随前端分发)────────────────
+- Fraunces — 标题衬线可变字体(Latin 子集)
+    许可证: SIL Open Font License 1.1
+    https://github.com/undercasetype/Fraunces
+- Inter — 正文无衬线可变字体(Latin 子集)
+    许可证: SIL Open Font License 1.1
+    https://github.com/rsms/inter
+- JetBrains Mono — 等宽可变字体(技术名词标注用)
+    许可证: SIL Open Font License 1.1
+    https://github.com/JetBrains/JetBrainsMono
+  (各 OFL 全文随附 musicmaster/web/static/fonts/OFL-*.txt;中文走系统字体,不打包分发)
 
 ================================================================================
 合规说明(履行各开源许可的署名义务;非法律意见):
