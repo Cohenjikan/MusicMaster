@@ -43,11 +43,11 @@ def main():
     print("[4/5] 装 crepe(--no-deps,保 TF 不被降级)")
     run("install", "--no-deps", "crepe")
     print("[5/5] 装 requirements-core + 本包")
-    run("install", "-r", str(ROOT / "requirements-core.txt"))
+    run("install", "-r", str(ROOT / "requirements" / "requirements-core.txt"))
     run("install", "-e", str(ROOT))
 
-    print("\n[OK] 完成。启动 GUI:")
-    print(f"    {py} {ROOT / 'app.py'}")
+    print("\n[OK] 完成。启动 GUI:双击 启动.bat")
+    print(f"    (或命令行: {py} -m musicmaster.web.server)")
     print("简谱出图还需 LilyPond,并设 LILYPOND_EXE(见 README)。")
 
 

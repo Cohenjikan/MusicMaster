@@ -33,11 +33,9 @@ render = ["verovio>=4.0", "jianpu-ly>=1.8"]
 transcribe = ["crepe", "hmmlearn>=0.3", "tensorflow==2.15.0", "basic-pitch>=0.3"]
 # 钢琴复音(ByteDance 高分辨率;MAESTRO 权重,个人/研究用)。torch 与 TF 同 venv 需注意版本。
 bytedance = ["piano-transcription-inference", "torch>=2.0"]
-# 图形界面(Gradio 单页 Web GUI)
-gui = ["gradio==6.15.2"]
-# 可选 server 模式(FastAPI REST,供 API 消费者;Gradio 是主 GUI)
-server = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "httpx>=0.27", "pydantic>=2.5", "python-multipart>=0.0.9"]
-dev = ["pytest>=7", "jsonschema>=4"]
+# 本地 Web GUI(FastAPI 托管设计稿前端 + 四功能 REST 端点;主入口 musicmaster.web.server)
+gui = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "python-multipart>=0.0.9"]
+dev = ["pytest>=7", "jsonschema>=4", "httpx>=0.27"]
 
 [project.scripts]
 musicmaster = "musicmaster.cli:main"
@@ -48,3 +46,12 @@ include = ["musicmaster*"]
 
 [tool.setuptools.package-data]
 "musicmaster.core" = ["schemas/*.json"]
+"musicmaster.web" = ["static/*", "static/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = [
+  "ignore::DeprecationWarning",
+  "ignore::UserWarning",
+]

@@ -155,7 +155,9 @@ def main() -> None:
         "========================================\n",
         flush=True,
     )
-    if os.environ.get("MUSICMASTER_NO_BROWSER") != "1":
+    # 自动开浏览器:改为「显式开启」——启动.bat 会设 MUSICMASTER_OPEN_BROWSER=1,
+    # 这样用户双击启动器照常弹浏览器;而开发/预览直接跑模块时不乱弹。
+    if os.environ.get("MUSICMASTER_OPEN_BROWSER") == "1":
         threading.Timer(1.5, lambda: webbrowser.open(url)).start()
     uvicorn.run(app, host=host, port=port, log_level="info")
 

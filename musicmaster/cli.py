@@ -3,7 +3,7 @@
 """MusicMaster 顶层 CLI:`musicmaster <子命令> ...`。
 
 子命令(各自转发到对应模块,重依赖按需懒加载):
-  gui          启动 Gradio Web GUI(= python app.py)
+  gui          启动本地 Web GUI(FastAPI 托管设计稿前端;= python -m musicmaster.web.server)
   transcribe   扒谱(autopilot:质量门→引擎→定调→渲染→可信度)
   convert      简谱 ⇄ 五线谱 互转
   render       MusicXML → 五线谱 + 简谱
@@ -30,10 +30,10 @@ def main(argv=None) -> int:
     if cmd == "gui":
         import os
         import subprocess
-        from pathlib import Path
 
-        app = Path(__file__).resolve().parents[1] / "app.py"
-        return subprocess.call([sys.executable, str(app), *rest], env={**os.environ, "PYTHONUTF8": "1"})
+        # 本地 Web GUI(FastAPI,托管 design 前端);= python -m musicmaster.web.server
+        env = {**os.environ, "PYTHONUTF8": "1", "MUSICMASTER_OPEN_BROWSER": "1"}
+        return subprocess.call([sys.executable, "-m", "musicmaster.web.server", *rest], env=env)
 
     if cmd == "transcribe":
         from .transcribe import autopilot
