@@ -71,12 +71,17 @@
     fd.append('voice_steps', vsEl ? vsEl.value : '50');
     fd.append('voice_cfg', cfgEl ? cfgEl.value : '0.7');
 
+    var prog = MM.progress(btn);
     var restore = MM.setBusy(btn, '提交中…');
+    prog.start();
 
     MM.run('vocal', fd, function (job) {
-      // 长任务:用真实阶段文案刷新按钮(修音准 → 重塑音色 …)。
+      // 长任务:用真实阶段文案刷新按钮(修音准 → 重塑音色 …)+ 进度条。
       if (job && job.stage) MM.setBusyText(btn, job.stage);
+      prog.update(job);
     }).then(function (job) {
+      var ok = job.status !== 'error' && job.result && job.result.ok;
+      if (ok) prog.done(); else prog.fail();
       // 硬失败:任务本身报错。
       if (job.status === 'error') { MM.toast(job.error || '任务失败。', 'error'); return; }
 
@@ -111,6 +116,7 @@
       }
       MM.renderDownloads(ensureGrid(), job.id, r.downloads || []);
     }).catch(function (e) {
+      prog.fail();
       MM.toast('' + e, 'error');
     }).finally(restore);
   });

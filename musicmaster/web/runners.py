@@ -13,10 +13,13 @@ venv 路由与 app.py 一致:
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -33,6 +36,80 @@ def _subprocess_env() -> dict:
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONPATH"] = str(REPO) + os.pathsep + env.get("PYTHONPATH", "")
     return env
+
+
+def _stream_subprocess(cmd: list, cwd: str, env: dict, timeout: float,
+                       on_line: Optional[Callable[[str], None]]) -> tuple[int, str]:
+    """跑子进程,把 stdout+stderr **逐行**喂给 on_line(用于实时解析进度),
+    返回 (returncode, 完整日志)。超时则杀进程并抛 TimeoutExpired。
+    用流式 Popen 取代 subprocess.run —— 这样多分钟的分离/降噪期间能边跑边更新进度,
+    而**不触碰** separate.pipeline 的任何算法(只读它本来就打印的阶段标记)。"""
+    proc = subprocess.Popen(
+        cmd, cwd=cwd, env=env,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, encoding="utf-8", errors="replace", bufsize=1,
+    )
+    lines: list[str] = []
+    deadline = time.time() + timeout
+    timed_out = {"v": False}
+
+    def _killer() -> None:
+        while True:
+            if proc.poll() is not None:
+                return
+            if time.time() > deadline:
+                timed_out["v"] = True
+                try:
+                    proc.kill()
+                except Exception:  # noqa: BLE001
+                    pass
+                return
+            time.sleep(1.0)
+
+    threading.Thread(target=_killer, daemon=True).start()
+    try:
+        if proc.stdout is not None:
+            for line in proc.stdout:
+                lines.append(line)
+                if on_line is not None:
+                    try:
+                        on_line(line)
+                    except Exception:  # noqa: BLE001 — 进度解析失败绝不能影响任务本身
+                        pass
+    finally:
+        try:
+            if proc.stdout is not None:
+                proc.stdout.close()
+        except Exception:  # noqa: BLE001
+            pass
+    rc = proc.wait()
+    if timed_out["v"]:
+        raise subprocess.TimeoutExpired(cmd, timeout)
+    return rc, "".join(lines)
+
+
+def _watch_artifacts(job, d: Path, milestones: list, stop_event: "threading.Event",
+                     interval: float = 1.5) -> None:
+    """后台守护线程:轮询 job 目录里的「里程碑文件」,据此推断真实进度。
+    milestones = [(glob 或 callable(dir)->bool, progress, 阶段文案), ...](progress 须递增)。
+    取「已达成的最高里程碑」单调推进 —— 对乱序产出也稳。**只读文件,绝不碰生成逻辑**,
+    用于内部子进程不透明的 vocal/transcribe(无法流式读其 stdout)。"""
+    best = -1
+    while not stop_event.is_set():
+        cur = best
+        for idx in range(len(milestones)):
+            pat = milestones[idx][0]
+            try:
+                exists = bool(pat(d)) if callable(pat) else any(d.glob(pat))
+            except Exception:  # noqa: BLE001
+                exists = False
+            if exists and idx > cur:
+                cur = idx
+        if cur > best:
+            best = cur
+            _, prog, label = milestones[best]
+            job.set_stage(label, prog)
+        stop_event.wait(interval)
 
 
 def _sep_python() -> Optional[str]:
@@ -173,8 +250,17 @@ def run_transcribe(job, audio_path: str, engine: str = "crepe", key: str = "") -
                 "spots": None, "downloads": [],
                 "message": f"未知引擎「{engine}」,可选:{', '.join(_engines)}。"}
     d = Path(job.job_dir)
+    stop = threading.Event()
+    # autopilot.main 是一次阻塞调用、内部 stdout 不易按 job 截获 → 改用文件里程碑推断真实进度
+    milestones = [
+        ("notes.json", 0.50, "音符已识别,生成 MIDI / 谱面…"),
+        ("out.musicxml", 0.72, "已成谱,渲染五线谱…"),
+        ("staff.svg", 0.85, "评估逐音可信度…"),
+        ("confidence.json", 0.93, "收尾…"),
+    ]
+    job.set_stage(f"记谱中(引擎 {engine}:体检 → 转录 → 定调 → 渲染 → 可信度)", 0.3)
+    threading.Thread(target=_watch_artifacts, args=(job, d, milestones, stop), daemon=True).start()
     try:
-        job.set_stage(f"记谱中(引擎 {engine}:体检 → 转录 → 定调 → 渲染 → 可信度)", 0.3)
         argv = [str(audio_path), "--out", str(d), "--engine", engine]
         if key and key.strip():
             argv += ["--key", key.strip()]
@@ -197,6 +283,8 @@ def run_transcribe(job, audio_path: str, engine: str = "crepe", key: str = "") -
             hint = (f"\n\n提示:引擎「{engine}」需专用环境(basic-pitch 需 TensorFlow 2.15;"
                     f"bytedance 需 GPU)。快速上手请用默认引擎 crepe(人声/单旋律最佳)。")
         return {"ok": False, "message": f"扒谱失败:{type(e).__name__}: {str(e)[:240]}{hint}"}
+    finally:
+        stop.set()
 
 
 def _parse_confidence(d: Path) -> tuple[Optional[int], Optional[list]]:
@@ -253,28 +341,65 @@ def run_separate(job, audio_path: str, stages: str = "1,2,3", denoise: str = "de
             "scripts/setup_sep.py 安装,并设 paths.local.json 的 sep_python 或环境变量 "
             "MUSICMASTER_SEP_PYTHON 指向其 python。")}
     d = Path(job.job_dir)
-    job.set_stage("分离中(BS-RoFormer → 去和声 → 降噪,三段级联,可能数分钟)", 0.2)
     cmd = [sep_py, "-m", "musicmaster.separate.pipeline", str(audio_path),
            "--stages", stages, "--denoise", denoise, "--out-dir", str(d)]
+
+    # 真实进度:流式读子进程 stdout,解析它本就打印的阶段标记(【1/2/3】、产物)+ tqdm 的 N%。
+    selected = [s for s in (stages or "").split(",") if s.strip() in ("1", "2", "3")]
+    n = len(selected) or 1
+
+    def _slice(i: int) -> tuple[float, float]:  # 第 i 个被选段在 [0.08,0.92] 内的子区间
+        i = max(0, min(i, n - 1))
+        return 0.08 + 0.84 * (i / n), 0.08 + 0.84 * ((i + 1) / n)
+
+    labels = {"1": "① 分出人声与伴奏(BS-RoFormer)…",
+              "2": "② 去和声,只留主唱…",
+              "3": "③ 洗净杂音(降噪提纯)…"}
+    pct_re = re.compile(r"(\d{1,3})\s*%")
+    st = {"i": -1, "p": 0.05}
+
+    def _bump(p: float, label: Optional[str] = None) -> None:
+        if p > st["p"]:  # 单调:进度只前进不回退
+            st["p"] = p
+            if label is not None:
+                job.set_stage(label, p)
+            else:
+                job.set_progress(p)
+
+    def on_line(line: str) -> None:
+        s = line.strip()
+        which = "1" if s.startswith("【1") else "2" if s.startswith("【2") else "3" if s.startswith("【3") else None
+        if which is not None:
+            st["i"] = selected.index(which) if which in selected else st["i"] + 1
+            lo, _ = _slice(st["i"])
+            _bump(lo, labels[which])
+            return
+        if s.startswith("产物"):
+            _bump(0.95, "整理产物…")
+            return
+        if st["i"] >= 0:  # 阶段内 tqdm 百分比 → 细化进度(尽力而为,失败忽略)
+            m = pct_re.search(s)
+            if m:
+                lo, hi = _slice(st["i"])
+                _bump(lo + (hi - lo) * (min(100, max(0, int(m.group(1)))) / 100.0))
+
+    job.set_stage("启动分离子进程(三段级联,可能数分钟)…", 0.05)
     try:
-        r = subprocess.run(cmd, cwd=str(REPO), env=_subprocess_env(),
-                           capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=1800)
-        log = (r.stdout or "") + "\n" + (r.stderr or "")
-        wavs = _downloads(d)  # 分离产物都是 wav
-        if r.returncode != 0:
-            return {"ok": False, "message": f"分离失败(returncode={r.returncode})",
-                    "log": log[-2000:], "tracks": []}
-        if not wavs:
-            return {"ok": False, "message": "分离子进程返回 0 但没有产出 wav,请看日志。",
-                    "log": log[-2000:], "tracks": []}
-        return {"ok": True, "message": f"拆好了,产物 {len(wavs)} 个。",
-                "log": log[-1200:], "tracks": wavs}
+        rc, log = _stream_subprocess(cmd, str(REPO), _subprocess_env(), 1800, on_line)
     except subprocess.TimeoutExpired:
         return {"ok": False, "message": "分离超时(>30 分钟),请用更短的音频或更少的处理段。",
                 "log": "", "tracks": []}
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "message": f"分离异常:{type(e).__name__}: {e}", "log": "", "tracks": []}
+    wavs = _downloads(d)  # 分离产物都是 wav
+    if rc != 0:
+        return {"ok": False, "message": f"分离失败(returncode={rc})",
+                "log": log[-2000:], "tracks": []}
+    if not wavs:
+        return {"ok": False, "message": "分离子进程返回 0 但没有产出 wav,请看日志。",
+                "log": log[-2000:], "tracks": []}
+    return {"ok": True, "message": f"拆好了,产物 {len(wavs)} 个。",
+            "log": log[-1200:], "tracks": wavs}
 
 
 # ─────────────────────── 重塑(修音换音色)─────────────────────── #
@@ -290,8 +415,20 @@ def run_vocal(job, raw: str, ref: str, self_ref: str,
             "修音/换音色环境未就绪(需 GPU venv + 权重):\n  - " + "\n  - ".join(probs)
             + "\n\n见 README 的「修音换音色(GPU)」设置。")}
     d = Path(job.job_dir)
+    stop = threading.Event()
+
+    def _vc_final(dd: Path) -> bool:  # 顶层出现非 corrected_* 的 wav = Seed-VC 成品已生成
+        return any(p.name not in ("corrected_24k.wav", "corrected_44k.wav") for p in dd.glob("*.wav"))
+
+    # two_stage 内部子进程不透明 → 用 job 目录里的中间产物(corrected_24k→44k→vc 成品)推断真实进度
+    milestones = [
+        ("corrected_24k.wav", 0.50, "① 音准修好,正在换音色(Seed-VC,整首分块)…"),
+        ("corrected_44k.wav", 0.56, "重采样完成,生成你的音色…"),
+        (_vc_final, 0.92, "音色已生成,收尾…"),
+    ]
+    job.set_stage("修音中(扩散修音准,整首自动分块,高精度可能 20+ 分钟)…", 0.15)
+    threading.Thread(target=_watch_artifacts, args=(job, d, milestones, stop), daemon=True).start()
     try:
-        job.set_stage("修音中 → 换音色中(整首自动分块,高精度可能 20+ 分钟)", 0.15)
         res = vpipe.two_stage(raw, ref, self_ref, d,
                               correct_steps=int(correct_steps), voice_steps=int(voice_steps),
                               voice_cfg=float(voice_cfg))
@@ -311,6 +448,8 @@ def run_vocal(job, raw: str, ref: str, self_ref: str,
         import traceback
         return {"ok": False, "message": f"失败:{type(e).__name__}: {e}",
                 "detail": traceback.format_exc()[-800:]}
+    finally:
+        stop.set()
 
 
 def _relname(base: Path, p) -> Optional[str]:

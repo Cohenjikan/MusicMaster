@@ -134,10 +134,15 @@
       fd.append('stages', collectStages());
       fd.append('denoise', readDenoise());
 
+      var prog = MM.progress(btn);
       var restore = MM.setBusy(btn, '提交中…');
+      prog.start();
       MM.run('separate', fd, function (job) {
         MM.setBusyText(btn, job.stage || '分离中…');
+        prog.update(job);
       }).then(function (job) {
+        var ok = job.status !== 'error' && job.result && job.result.ok;
+        if (ok) prog.done(); else prog.fail();
         if (job.status === 'error') { MM.toast(job.error || '拆声出错了。', 'error'); return; }
         var result = job.result || {};
         if (result.ok === false) { showSoftFail(result.message); return; }
@@ -146,6 +151,7 @@
         if (pane1) MM.renderDownloads(pane1.querySelector('.dl-grid'), job.id, result.tracks || []);
         MM.switchOut(panel, 0);
       }).catch(function (e) {
+        prog.fail();
         MM.toast('' + e, 'error');
       }).finally(restore);
     });

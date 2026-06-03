@@ -23,7 +23,23 @@
       + 'border:1px solid rgba(255,255,255,.14);border-left:3px solid #a78bfa;border-radius:12px;padding:12px 15px;'
       + 'box-shadow:0 14px 40px rgba(0,0,0,.5);opacity:0;transform:translateY(8px);transition:.28s;white-space:pre-wrap;word-break:break-word}'
       + '.mm-toast.show{opacity:1;transform:none}.mm-toast.err{border-left-color:#fb7185}.mm-toast.ok{border-left-color:#4ade80}'
-      + '.cast[aria-busy="true"]{cursor:progress}';
+      + '.cast[aria-busy="true"]{cursor:progress}'
+      // ── 任务进度条(四部门共用;注入式,免改设计稿)──
+      + '.mm-prog{margin-top:14px;max-height:0;opacity:0;overflow:hidden;transition:opacity .3s,max-height .3s}'
+      + '.mm-prog.show{max-height:60px;opacity:1}'
+      + '.mm-prog-bar{position:relative;height:8px;border-radius:99px;background:rgba(255,255,255,.10);overflow:hidden}'
+      + '.mm-prog-fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:99px;'
+      + 'background:var(--accent,#a78bfa);transition:width .35s ease}'
+      + '.mm-prog-fill::after{content:"";position:absolute;inset:0;'
+      + 'background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);'
+      + 'transform:translateX(-100%);animation:mmprogsh 1.2s linear infinite}'
+      + '.mm-prog.done .mm-prog-fill,.mm-prog.err .mm-prog-fill{transition:width .25s ease}'
+      + '.mm-prog.done .mm-prog-fill::after,.mm-prog.err .mm-prog-fill::after{display:none}'
+      + '.mm-prog.done .mm-prog-fill{background:#4ade80}.mm-prog.err .mm-prog-fill{background:#fb7185}'
+      + '.mm-prog-meta{display:flex;justify-content:space-between;gap:10px;margin-top:7px;'
+      + 'font-size:12px;line-height:1.4;color:var(--t2,#c4bdc6)}'
+      + '.mm-prog-pct{font-variant-numeric:tabular-nums;opacity:.85;flex:none}'
+      + '@keyframes mmprogsh{to{transform:translateX(100%)}}';
     var s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
   })();
 
@@ -167,6 +183,75 @@
   MM.switchOut = function (panel, idx) {
     var tabs = panel.querySelectorAll('[data-outtabs] .out-tab');
     if (tabs[idx]) tabs[idx].click();
+  };
+
+  /* 任务进度条控制器:在提交按钮(btn)下方注入一条进度条,四部门通用。
+     - start():显示并启动 trickle —— 即使后端进度粗/不动,条也会缓慢前移 + 流光,绝不显得卡死;
+     - update(job):把后端真实 job.progress(0..1)设为目标值(单调),并刷新 job.stage 文案;
+     - done():填满变绿后淡出;fail():变红后淡出。
+     trickle 规则:displayed 快速追上真实 target,真实值不动时只缓慢爬到 target+0.12 的天花板
+     (上限 0.92,不抢在真完成前到 100%),既「活着」又不虚报。每个 btn 复用同一条(幂等)。 */
+  MM.progress = function (btn) {
+    var noop = { start: function () {}, update: function () {}, done: function () {}, fail: function () {} };
+    if (!btn) return noop;
+    if (btn._mmProg) { btn._mmProg._reset(); return btn._mmProg; }
+
+    var el = document.createElement('div');
+    el.className = 'mm-prog';
+    el.setAttribute('role', 'progressbar');
+    el.innerHTML = '<div class="mm-prog-bar"><span class="mm-prog-fill"></span></div>'
+      + '<div class="mm-prog-meta"><span class="mm-prog-stage"></span><span class="mm-prog-pct"></span></div>';
+    if (btn.parentNode) btn.parentNode.insertBefore(el, btn.nextSibling);
+
+    var fill = el.querySelector('.mm-prog-fill'),
+        stageEl = el.querySelector('.mm-prog-stage'),
+        pctEl = el.querySelector('.mm-prog-pct');
+    var displayed = 0, target = 0, timer = null, finished = false;
+
+    function render() {
+      fill.style.width = (displayed * 100).toFixed(1) + '%';
+      pctEl.textContent = Math.round(displayed * 100) + '%';
+    }
+    function tick() {
+      if (finished) return;
+      var ceil = Math.min(0.92, target + 0.12);
+      if (displayed < target) displayed += (target - displayed) * 0.25;
+      else if (displayed < ceil) displayed += 0.006;
+      if (displayed > 0.999) displayed = 0.999;
+      render();
+    }
+    function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
+
+    var ctrl = {
+      el: el,
+      _reset: function () {
+        finished = false; displayed = 0; target = 0;
+        el.classList.remove('done', 'err'); stageEl.textContent = ''; render();
+      },
+      start: function () {
+        finished = false; el.classList.add('show');
+        if (!timer) timer = setInterval(tick, 200);
+      },
+      update: function (job) {
+        if (!job) return;
+        if (typeof job.progress === 'number' && isFinite(job.progress)) {
+          target = Math.max(target, Math.min(1, Math.max(0, job.progress)));
+        }
+        if (job.stage) stageEl.textContent = job.stage;
+      },
+      done: function () {
+        finished = true; stopTimer();
+        el.classList.add('done'); displayed = 1; render();
+        setTimeout(function () { el.classList.remove('show'); }, 750);
+      },
+      fail: function () {
+        finished = true; stopTimer();
+        el.classList.add('err'); render();
+        setTimeout(function () { el.classList.remove('show'); }, 1500);
+      }
+    };
+    btn._mmProg = ctrl;
+    return ctrl;
   };
 
   /* 把一个 .drop <label>(内含 <input type=file>)接成可用上传:监听 change + 拖放,

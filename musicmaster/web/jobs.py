@@ -45,6 +45,12 @@ class Job:
                 self.progress = max(0.0, min(1.0, float(progress)))
             self.updated_at = time.time()
 
+    def set_progress(self, progress: float) -> None:
+        """只更新进度(不动阶段文案);用于子进程日志里的细粒度百分比。"""
+        with self._lock:
+            self.progress = max(0.0, min(1.0, float(progress)))
+            self.updated_at = time.time()
+
     def to_public(self) -> dict:
         """序列化给前端的安全视图(不含锁等内部字段)。"""
         with self._lock:

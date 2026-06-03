@@ -38,17 +38,22 @@
       fd.append('direction', direction);
       fd.append('key', key);
 
+      var prog = MM.progress(btn);
       var restore = MM.setBusy(btn, '提交中…');
+      prog.start();
       MM.run('convert', fd, function (job) {
         if (job && job.stage) MM.setBusyText(btn, job.stage);
+        prog.update(job);
       })
         .then(function (job) {
+          var ok = job.status !== 'error' && job.result && job.result.ok;
+          if (ok) prog.done(); else prog.fail();
           if (job.status === 'error') { MM.toast(job.error || '任务出错。', 'error'); return; }
           var r = job.result || {};
           if (r.ok === false) { MM.toast(r.message || '转换未完成。', 'error'); return; }
           render(job, r);
         })
-        .catch(function (e) { MM.toast('' + e, 'error'); })
+        .catch(function (e) { prog.fail(); MM.toast('' + e, 'error'); })
         .finally(restore);
     });
 

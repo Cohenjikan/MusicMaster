@@ -20,6 +20,7 @@
     var getFile = player ? MM.makeUploadPlayer(player, 'audio/*', null) : function () { return null; };
 
     var btn = panel.querySelector('.cast');
+    var prog = MM.progress(btn);
 
     // ── 产出三 pane(按 DOM 顺序:解读 / 谱面 / 带走) ──
     var panes = panel.querySelectorAll('.out-body .out-pane');
@@ -27,6 +28,7 @@
 
     function onProgress(job) {
       if (job && job.stage) MM.setBusyText(btn, job.stage);
+      prog.update(job);
     }
 
     // 解读 pane:可信度环 + 概述 + 存疑段 + 报告全文(report_md 始终展示)
@@ -156,9 +158,14 @@
         fd.append('key', key);
 
         var restore = MM.setBusy(btn, '提交中…');
+        prog.start();
         MM.run('transcribe', fd, onProgress)
-          .then(onResult)
-          .catch(function (e) { MM.toast('' + e, 'error'); })
+          .then(function (job) {
+            var ok = job.status !== 'error' && job.result && job.result.ok;
+            if (ok) prog.done(); else prog.fail();
+            onResult(job);
+          })
+          .catch(function (e) { prog.fail(); MM.toast('' + e, 'error'); })
           .finally(restore);
       });
     }
