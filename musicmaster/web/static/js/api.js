@@ -39,7 +39,12 @@
       + '.mm-prog-meta{display:flex;justify-content:space-between;gap:10px;margin-top:7px;'
       + 'font-size:12px;line-height:1.4;color:var(--t2,#c4bdc6)}'
       + '.mm-prog-pct{font-variant-numeric:tabular-nums;opacity:.85;flex:none}'
-      + '@keyframes mmprogsh{to{transform:translateX(100%)}}';
+      + '@keyframes mmprogsh{to{transform:translateX(100%)}}'
+      // ── 清空 / 重新开始 按钮 ──
+      + '.mm-clear{display:block;margin:14px auto 0;padding:7px 18px;font-family:var(--sans,system-ui);'
+      + 'font-size:12.5px;color:var(--t2,#c4bdc6);background:transparent;'
+      + 'border:1px solid var(--border,rgba(255,255,255,.16));border-radius:99px;cursor:pointer;transition:.18s}'
+      + '.mm-clear:hover{color:var(--t0,#f6f2ec);border-color:rgba(255,255,255,.34);background:rgba(255,255,255,.05)}';
     var s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
   })();
 
@@ -163,15 +168,22 @@
     if (!gridEl) return;
     gridEl.innerHTML = '';
     (items || []).forEach(function (it) {
-      var b = MM.badge(it.name), base = it.name.split('/').pop();
+      var base = it.name.split('/').pop();
+      var dl = it.download || base;          // 干净英文「另存为」名
+      var label = it.label || base;          // 易懂标题
+      var b = MM.badge(dl);
       var a = document.createElement('a');
       a.className = 'dl';
-      a.href = MM.fileUrl(jobId, it.name);
-      a.setAttribute('download', base);
+      // ?as= 把友好英文名告诉服务端,让 Content-Disposition 与 <a download> 一致(否则同源响应会覆盖)
+      a.href = MM.fileUrl(jobId, it.name) + '?as=' + encodeURIComponent(dl);
+      a.setAttribute('download', dl);
+      a.title = it.desc || label;
       a.innerHTML =
         '<span class="ft ' + b[0] + '">' + MM.esc(b[1]) + '</span>' +
-        '<span><div class="nm">' + MM.esc(base) + '</div><div class="sz">' +
-        MM.fmtKB(it.size_kb) + '</div></span><span class="arr">↓</span>';
+        '<span class="dl-mid"><div class="nm">' + MM.esc(label) + '</div>' +
+        (it.desc ? '<div class="ds">' + MM.esc(it.desc) + '</div>' : '') +
+        '<div class="sz">' + MM.esc(dl) + ' · ' + MM.fmtKB(it.size_kb) + '</div></span>' +
+        '<span class="arr">↓</span>';
       gridEl.appendChild(a);
     });
     if (!(items || []).length) {
@@ -185,16 +197,92 @@
     if (tabs[idx]) tabs[idx].click();
   };
 
+  /* 裁掉真实五线谱(music21/Verovio 生成)整页 SVG 的大片白边:注入后把 viewBox 收到内容包围盒。
+     谱面 pane 可能处于隐藏子标签(display:none → getBBox 失效)→ 退而用离屏可见探针克隆测量。
+     纯前端,不碰渲染配方。convert / transcribe 注入 staff_svg 后调用。 */
+  MM.fitSheetSvg = function (container) {
+    var svg = container && container.querySelector('svg');
+    if (!svg) return;
+    // 真实谱面是 Verovio 整页(短曲只占约 1/3,上下全白)。坑:改 svg 的 viewBox/width、或把 svg
+    // 移到新容器,都会触发内部嵌套 svg 重排,墨迹位置随之失效 → 怎么裁都对不上。可靠做法:
+    // **完全不动 svg 的属性与父节点**,只在 svg 上加一个 CSS transform(平移+缩放)把音符区
+    // 推到左上并放大,再把容器 .sheet 的高度收到那条 + overflow:hidden 裁掉其余 —— 纯视觉,不重排。
+    // 墨迹只量音符图元(path/use/...),**排除标题文字**,免得把「Music21 Fragment」和它下方空白算进来。
+    function fitOnce() {
+      if (svg.getAttribute('data-mm-fitted')) return true;
+      var r = svg.getBoundingClientRect();
+      if (r.width < 30 || r.height < 30) return false;            // 隐藏/未布局 → 等
+      // Verovio 把每行乐谱包成 <g class="system"> —— 优先只量它,天然排除标题与「Verovio」页脚;
+      // 拿不到则退回量音符图元(仍排除 <text>)。
+      var systems = svg.querySelectorAll('g.system');
+      var useSys = systems.length > 0;
+      var nodes = useSys ? systems : svg.querySelectorAll('path,use,ellipse,line,polyline,rect');
+      var top = Infinity, bot = -Infinity, left = Infinity, right = -Infinity, cnt = 0;
+      for (var i = 0; i < nodes.length; i++) {
+        var b = nodes[i].getBoundingClientRect();
+        if (b.width > 0 && b.height > 0 && b.height < r.height * 0.9 && b.width < r.width * 1.6) {
+          if (b.top < top) top = b.top; if (b.bottom > bot) bot = b.bottom;
+          if (b.left < left) left = b.left; if (b.right > right) right = b.right; cnt++;
+        }
+      }
+      if (cnt < (useSys ? 1 : 3)) return false;
+      var ix = left - r.left, iy = top - r.top, iw = right - left, ih = bot - top;
+      if (iw <= 0 || ih <= 0) return false;
+      if (iy < r.height * 0.04 && (iy + ih) > r.height * 0.94) { svg.setAttribute('data-mm-fitted', '1'); return true; }  // 已紧凑
+      var padX = Math.max(iw * 0.03, 8), padY = Math.max(ih * 0.22, 18);
+      var cx = Math.max(0, ix - padX), cy = Math.max(0, iy - padY);
+      var cw = Math.min(r.width - cx, iw + padX * 2), ch = ih + padY * 2;
+      var Wc = r.width;                                            // 目标宽 = 当前谱面宽
+      var Hc = Math.max(200, Math.round((window.innerHeight || 800) * 0.6));
+      var s = Wc / cw; if (s * ch > Hc) s = Hc / ch;               // 先填宽,过高则改填高
+      // 就地变换(不移动 svg、不改其属性):把裁剪框左上角移到 (0,0) 并按 s 缩放
+      svg.style.transformOrigin = 'top left';
+      svg.style.transform = 'translate(' + (-cx * s) + 'px,' + (-cy * s) + 'px) scale(' + s + ')';
+      // 容器收高 + 裁掉溢出(svg 布局盒仍很高,这里只露出顶部裁出来的那条)
+      container.style.overflow = 'hidden';
+      container.style.height = Math.round(ch * s) + 'px';
+      container.style.padding = '0';
+      svg.setAttribute('data-mm-fitted', '1');
+      return true;
+    }
+    if (fitOnce()) return;
+    var n = 0;
+    (function retry() {                                          // 等可见的若干帧内补裁
+      if (svg.getAttribute('data-mm-fitted') || fitOnce()) return;
+      if (n++ < 40 && window.requestAnimationFrame) requestAnimationFrame(retry);
+    })();
+    // 切到「谱面」子标签时再裁。钩子**每面板只绑一次**(_mmSheetHook 守卫),且不持有旧 svg ——
+    // 点击时对当前 DOM 里仍未裁的谱面 svg 调 MM.fitSheetSvg,避免每次出谱都叠加监听器/定时器(修 QA#5)。
+    var panel = container.closest ? container.closest('.panel') : null;
+    if (panel && !panel._mmSheetHook) {
+      panel._mmSheetHook = true;
+      var tabs = panel.querySelectorAll('[data-outtabs] .out-tab');
+      Array.prototype.forEach.call(tabs, function (t) {
+        t.addEventListener('click', function () {
+          var sheets = panel.querySelectorAll('.sheet');
+          Array.prototype.forEach.call(sheets, function (sh) {
+            if (sh.querySelector('svg:not([data-mm-fitted])')) {
+              setTimeout(function () { MM.fitSheetSvg(sh); }, 80);
+              setTimeout(function () { MM.fitSheetSvg(sh); }, 360);
+            }
+          });
+        });
+      });
+    }
+  };
+
   /* 任务进度条控制器:在提交按钮(btn)下方注入一条进度条,四部门通用。
-     - start():显示并启动 trickle —— 即使后端进度粗/不动,条也会缓慢前移 + 流光,绝不显得卡死;
-     - update(job):把后端真实 job.progress(0..1)设为目标值(单调),并刷新 job.stage 文案;
-     - done():填满变绿后淡出;fail():变红后淡出。
-     trickle 规则:displayed 快速追上真实 target,真实值不动时只缓慢爬到 target+0.12 的天花板
-     (上限 0.92,不抢在真完成前到 100%),既「活着」又不虚报。每个 btn 复用同一条(幂等)。 */
-  MM.progress = function (btn) {
+     opts.comfort=true 开「安慰模式」(给记谱/重塑这类日志不即时、真实进度只有粗档的长任务):
+       真实值不动时极慢爬升(0.01%/s,过 85% 后 0.01%/30s,上限 0.97),2 位小数让数字肉眼在动;
+       轮播 opts.messages 里的技术文案走一遍架构,产生「仍在运作」的安全感;
+       真实进度一到(日志同步)即缓动跳向真值 —— 自动切回真实进度条。
+     普通模式:trickle 缓动 + 流光,后端进度粗也绝不显卡死,但不虚报(上限 target+0.12 / 0.92)。
+     start/update(job)/done/fail;每个 btn 复用同一条(幂等)。 */
+  MM.progress = function (btn, opts) {
     var noop = { start: function () {}, update: function () {}, done: function () {}, fail: function () {} };
     if (!btn) return noop;
-    if (btn._mmProg) { btn._mmProg._reset(); return btn._mmProg; }
+    opts = opts || {};
+    if (btn._mmProg) { btn._mmProg._reset(opts); return btn._mmProg; }
 
     var el = document.createElement('div');
     el.className = 'mm-prog';
@@ -206,13 +294,15 @@
     var fill = el.querySelector('.mm-prog-fill'),
         stageEl = el.querySelector('.mm-prog-stage'),
         pctEl = el.querySelector('.mm-prog-pct');
-    var displayed = 0, target = 0, timer = null, finished = false;
+    var displayed = 0, target = 0, timer = null, finished = false, hideTimer = null;
+    var comfort = !!opts.comfort, messages = opts.messages || [], msgIdx = 0, secCount = 0;
 
     function render() {
-      fill.style.width = (displayed * 100).toFixed(1) + '%';
-      pctEl.textContent = Math.round(displayed * 100) + '%';
+      fill.style.width = (displayed * 100).toFixed(2) + '%';
+      pctEl.textContent = (finished && displayed >= 1) ? '100%'
+        : (comfort ? (displayed * 100).toFixed(2) : Math.round(displayed * 100)) + '%';
     }
-    function tick() {
+    function tickNormal() {
       if (finished) return;
       var ceil = Math.min(0.92, target + 0.12);
       if (displayed < target) displayed += (target - displayed) * 0.25;
@@ -220,38 +310,94 @@
       if (displayed > 0.999) displayed = 0.999;
       render();
     }
+    function tickComfort() {
+      if (finished) return;
+      secCount++;
+      if (target > displayed + 0.0005) {
+        displayed += (target - displayed) * 0.35;          // 真实进度到了 → 缓动跳向真值
+      } else {                                             // 真实值不动 → 极慢假进度(纯安慰)
+        var perSec = displayed < 0.85 ? 0.0001 : (0.0001 / 30);  // 0.01%/s;过 85 后 0.01%/30s
+        var cap = displayed < 0.85 ? 0.85 : 0.97;
+        if (displayed < cap) displayed = Math.min(cap, displayed + perSec);
+      }
+      if (displayed > 0.999) displayed = 0.999;
+      if (messages.length && secCount % 4 === 0) {         // 每 ~4s 换一条技术安慰文案
+        stageEl.textContent = messages[msgIdx % messages.length]; msgIdx++;
+      }
+      render();
+    }
+    function startTimer() {
+      if (timer) return;
+      timer = setInterval(comfort ? tickComfort : tickNormal, comfort ? 1000 : 200);
+    }
     function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
 
     var ctrl = {
       el: el,
-      _reset: function () {
-        finished = false; displayed = 0; target = 0;
+      _reset: function (o) {
+        o = o || {};
+        finished = false; displayed = 0; target = 0; msgIdx = 0; secCount = 0;
+        comfort = !!o.comfort; messages = o.messages || [];
+        stopTimer();
         el.classList.remove('done', 'err'); stageEl.textContent = ''; render();
       },
       start: function () {
-        finished = false; el.classList.add('show');
-        if (!timer) timer = setInterval(tick, 200);
+        // 每次开始都清零状态(transcribe 的 prog 在 init 建一次、重复提交不会再 _reset → 必须在这清)
+        if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }  // 取消上一轮排队的收起,免得隐藏新条
+        finished = false; displayed = 0; target = 0; msgIdx = 0; secCount = 0;
+        el.classList.remove('done', 'err'); render();
+        el.classList.add('show');
+        if (comfort && messages.length) { stageEl.textContent = messages[0]; msgIdx = 1; }
+        startTimer();
       },
       update: function (job) {
         if (!job) return;
         if (typeof job.progress === 'number' && isFinite(job.progress)) {
           target = Math.max(target, Math.min(1, Math.max(0, job.progress)));
         }
-        if (job.stage) stageEl.textContent = job.stage;
+        if (!comfort && job.stage) stageEl.textContent = job.stage;  // 安慰模式由轮播文案主导
       },
       done: function () {
         finished = true; stopTimer();
         el.classList.add('done'); displayed = 1; render();
-        setTimeout(function () { el.classList.remove('show'); }, 750);
+        if (hideTimer) clearTimeout(hideTimer);
+        hideTimer = setTimeout(function () { el.classList.remove('show'); hideTimer = null; }, 750);
       },
       fail: function () {
         finished = true; stopTimer();
         el.classList.add('err'); render();
-        setTimeout(function () { el.classList.remove('show'); }, 1500);
+        if (hideTimer) clearTimeout(hideTimer);
+        hideTimer = setTimeout(function () { el.classList.remove('show'); hideTimer = null; }, 1500);
+      },
+      hide: function () {                 // 清空时即时收起(不闪红/绿)
+        if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+        finished = true; stopTimer();
+        el.classList.remove('show', 'done', 'err');
+        displayed = 0; target = 0; stageEl.textContent = ''; render();
       }
     };
     btn._mmProg = ctrl;
     return ctrl;
+  };
+
+  /* 在某面板的提交按钮所在卡片底部注入「清空 / 重新开始」按钮:点了调 onClear()
+     (各模块自己重置输入文件 / 播放器 / 结果 / 下载 / 进度条),降低「拖新文件覆盖」的学习成本。
+     每面板只建一个(幂等)。 */
+  MM.clearButton = function (panel, onClear) {
+    var btn = panel && panel.querySelector('.cast');
+    if (!btn) return null;
+    if (btn._mmClear) return btn._mmClear;
+    var c = document.createElement('button');
+    c.type = 'button';
+    c.className = 'mm-clear';
+    c.textContent = '清空 / 重新开始';
+    (btn.parentNode || panel).appendChild(c);   // 卡片底部,顺序确定
+    c.addEventListener('click', function () {
+      try { if (typeof onClear === 'function') onClear(); } catch (e) {}
+      MM.toast('已清空,可以开始新的了。', 'ok');
+    });
+    btn._mmClear = c;
+    return c;
   };
 
   /* 把一个 .drop <label>(内含 <input type=file>)接成可用上传:监听 change + 拖放,
@@ -271,7 +417,9 @@
       e.preventDefault();
       if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) set(e.dataTransfer.files[0]);
     });
-    return function () { return current; };
+    var get = function () { return current; };
+    get.clear = function () { if (input) input.value = ''; set(null); };
+    return get;
   };
 
   /* 把一个 [data-player] 唱机接成「上传 + 真实预览」控件:
@@ -316,7 +464,9 @@
     });
     player.addEventListener('dragover', function (e) { e.preventDefault(); });
     set(null);
-    return function () { return current; };
+    var get = function () { return current; };
+    get.clear = function () { if (input) input.value = ''; set(null); };
+    return get;
   };
 
   var PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';

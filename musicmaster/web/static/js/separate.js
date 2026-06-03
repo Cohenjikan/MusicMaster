@@ -87,8 +87,8 @@
         var base = String(tr.name).split('/').pop();
         if (anchor) playerHost.insertBefore(clone, anchor);
         else playerHost.appendChild(clone);
-        // 接真实音频(wirePlayer 内部会克隆控件以剥离 mockup 监听)
-        MM.wirePlayer(clone, MM.fileUrl(jobId, tr.name), base, null);
+        // 接真实音频(wirePlayer 内部会克隆控件以剥离 mockup 监听);标题/副标题用易懂名+这一版的说明
+        MM.wirePlayer(clone, MM.fileUrl(jobId, tr.name), tr.label || base, tr.desc || null);
       });
 
       // 更新成品清单:每束声音一条
@@ -102,7 +102,7 @@
             line.innerHTML =
               '<span class="d"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
               'stroke-width="3"><path d="M20 6L9 17l-5-5" stroke-linecap="round" ' +
-              'stroke-linejoin="round"/></svg></span>' + MM.esc(base);
+              'stroke-linejoin="round"/></svg></span>' + MM.esc(tr.label || base);
             doneList.appendChild(line);
           });
         }
@@ -154,6 +154,16 @@
         prog.fail();
         MM.toast('' + e, 'error');
       }).finally(restore);
+    });
+
+    MM.clearButton(panel, function () {
+      if (getFile.clear) getFile.clear();
+      if (btn._mmProg) btn._mmProg.hide();
+      clearPlayers();                    // 移除动态生成的几束声音唱机
+      if (pane1) MM.renderDownloads(pane1.querySelector('.dl-grid'), '', []);
+      var au = panel.querySelectorAll('audio');
+      Array.prototype.forEach.call(au, function (a) { try { a.pause(); } catch (e) {} });
+      MM.switchOut(panel, 0);
     });
   }
 

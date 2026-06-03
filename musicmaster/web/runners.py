@@ -139,6 +139,68 @@ def _classify(name: str) -> str:
     return "data"  # .json/.svg/.txt/.jianpu/.ly/...
 
 
+def _friendly(name: str) -> dict:
+    """原始产物名 → {label 易懂中文标题, desc 这一版独有的意义, download 干净英文另存名}。
+    仅界面层:磁盘文件名一律不改(不碰分离/扒谱配方),download 只作为浏览器「另存为」的名字。
+    拆声有多束(人声含和声 / 去和声主唱 / 降噪干净 / 伴奏 / 最终),desc 写清各自区别,
+    方便用户对比挑选 —— 三重过滤未必总是最好。"""
+    base = Path(name).name
+    low = base.lower()
+    ext = Path(base).suffix.lower()
+    # ── 音频束(仅当确为音频文件才按内容关键词判;否则乐谱/数据文件名含 lead/clean 会被误判)──
+    if ext in (".wav", ".mp3", ".flac", ".ogg", ".m4a"):
+        if base.startswith("最终_") or low.startswith("final") or low.startswith("vc_") or low.startswith("最终"):
+            return {"label": "最终成品 ★推荐", "download": "final.wav",
+                    "desc": "走完所选步骤的最终输出(重塑成品 / 拆声最干净束)。默认就用它;若觉得处理过度,可回头对比前几步。"}
+        if low.startswith("corrected"):
+            return {"label": "中间产物 · 只修了音准", "download": "corrected.wav",
+                    "desc": "重塑两段式的中间结果:只修了音准、还没换音色,用于和成品对照。"}
+        if "accomp" in low or "instrument" in low or "伴奏" in base:
+            return {"label": "伴奏", "download": "instrumental.wav",
+                    "desc": "去掉人声后的纯乐器(卡拉 OK 用)。"}
+        if "back" in low or "harmon" in low or "和声" in base or "合音" in base:
+            return {"label": "和声 / 合音", "download": "harmony.wav",
+                    "desc": "被去掉的那部分和声 / 合音(单独留给你参考)。"}
+        if "clean" in low or "dereverb" in low or "deecho" in low or "降噪" in base:
+            return {"label": "干净主唱 · 降噪(第3步)", "download": "vocals_clean.wav",
+                    "desc": "在去和声基础上再洗去残响 / 回声,最干净;但过度处理偶尔会发闷。"}
+        if "lead" in low or "主唱" in base:
+            return {"label": "主唱 · 去和声(第2步)", "download": "lead_vocal.wav",
+                    "desc": "去掉和声 / 合音,只留主唱;更聚焦,偶尔会削掉一点气声细节。"}
+        if base == "vocal.wav" or low.startswith("vocal") or "vocals" in low or "人声" in base:
+            return {"label": "人声 · 含和声(第1步)", "download": "vocals.wav",
+                    "desc": "从混音里分出的完整人声,仍带着和声 / 合音 —— 信息最全。"}
+        return {"label": base, "download": base, "desc": "音频文件。"}  # 其它音频兜底
+    # ── 记谱 / 互译(按文件类型)──
+    if ext == ".md" or base == "报告.md":
+        return {"label": "文字报告", "download": "report.md",
+                "desc": "整体把握 + 逐音存疑处的说明(建议先看这个)。"}
+    if "jianpu" in low or "简谱" in base or ext == ".jianpu":
+        if ext == ".pdf":
+            return {"label": "简谱 PDF", "download": "jianpu.pdf", "desc": "可打印的数字简谱(1234567)。"}
+        if ext == ".ly":
+            return {"label": "简谱源码(LilyPond)", "download": "jianpu_source.ly",
+                    "desc": "简谱的 LilyPond 源码;装 LilyPond 可自行改谱后再出 PDF。"}
+        return {"label": "简谱文本", "download": "jianpu.txt", "desc": "译出的数字简谱(纯文本)。"}
+    if ext in (".musicxml", ".xml", ".mxl"):
+        return {"label": "五线谱(MusicXML)", "download": "sheet.musicxml",
+                "desc": "标准五线谱,可导入 MuseScore / Finale 继续编辑。"}
+    if ext == ".svg":
+        return {"label": "五线谱预览图", "download": "staff_preview.svg",
+                "desc": "网页里看到的那张五线谱图片。"}
+    if ext in (".mid", ".midi"):
+        return {"label": "MIDI 旋律", "download": "melody.mid",
+                "desc": "可导入编曲软件(DAW)的音符数据。"}
+    if "conf" in low and ext == ".json":
+        return {"label": "可信度数据", "download": "confidence.json",
+                "desc": "逐音可信度的原始数据(进阶用)。"}
+    if ext == ".json":
+        return {"label": "音符数据", "download": "notes.json",
+                "desc": "每个音的时间 / 音高 / 时值(进阶或二次开发用)。"}
+    # 兜底:保留原名
+    return {"label": base, "download": base, "desc": ""}
+
+
 def _downloads(d: Path, only: Optional[list[str]] = None) -> list[dict]:
     """列出 job 目录下的产物(递归),给前端拼下载链接用。
     only:若给定文件名白名单(按序),只列其中存在的(用于控制展示顺序)。"""
@@ -161,7 +223,9 @@ def _dl_entry(base: Path, p: Path) -> dict:
         size_kb = round(p.stat().st_size / 1024, 1)
     except OSError:
         size_kb = 0.0
-    return {"name": rel, "size_kb": size_kb, "kind": _classify(p.name)}
+    f = _friendly(p.name)
+    return {"name": rel, "size_kb": size_kb, "kind": _classify(p.name),
+            "label": f["label"], "desc": f["desc"], "download": f["download"]}
 
 
 def _read_svg(path: Optional[Path]) -> Optional[str]:

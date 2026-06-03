@@ -299,13 +299,17 @@ img,svg{display:block;max-width:100%}
 .spot .at{font-family:var(--serif);font-style:italic;font-size:16px;color:#fcd34d;flex:none;width:64px}
 .spot .sw{font-family:var(--serif-sc);font-size:13.5px;color:var(--t1)}
 
-.dl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:11px}
+.dl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:11px}
 .dl{display:flex;align-items:center;gap:12px;padding:13px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface);transition:.18s;cursor:pointer}
 .dl:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 6%,transparent);transform:translateY(-2px)}
 .dl .ft{width:38px;height:38px;border-radius:11px;flex:none;display:grid;place-items:center;font-family:var(--mono);font-size:9.5px;font-weight:600;color:#fff;letter-spacing:.02em}
 .dl .ft.score{background:linear-gradient(135deg,#a78bfa,#7c3aed)}.dl .ft.midi{background:linear-gradient(135deg,#f59e0b,#b45309)}
 .dl .ft.audio{background:linear-gradient(135deg,#4ade80,#16a34a)}.dl .ft.data{background:linear-gradient(135deg,#7aa2f7,#3b6fe0)}
-.dl .nm{font-family:var(--serif-sc);font-size:13.5px;color:var(--t0)}.dl .sz{font-size:11px;color:var(--t2);font-family:var(--mono)}.dl .arr{margin-left:auto;color:var(--t3)}
+.dl .dl-mid{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;overflow:hidden}
+.dl .nm{font-family:var(--serif-sc);font-size:13.5px;color:var(--t0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dl .ds{font-size:11px;line-height:1.4;color:var(--t2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.dl .sz{font-size:10.5px;color:var(--t3);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dl .arr{flex:none;align-self:center;color:var(--t3)}
 
 details.help{border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface);overflow:hidden;margin-top:18px}
 details.help summary{list-style:none;cursor:pointer;padding:15px 17px;display:flex;align-items:center;gap:11px;font-family:var(--serif-sc);font-size:14px;font-weight:500;color:var(--t0)}
@@ -435,7 +439,7 @@ footer{margin-top:96px;border-top:1px solid var(--border);padding:60px 0 44px;ba
                 </div></div>
               <div class="field"><div class="label">主音<span class="opt-mark">选填</span></div>
                 <input class="input" placeholder="如 G · 留空便由它自己听出来">
-                <div class="help">只在「译成简谱」时用到:1 唱作哪个音。拿不准就空着。</div></div>
+                <div class="help">只在「译成简谱」时用到:1(do)唱作哪个音 —— 写主音 C D E F G A B,<b>升号</b>加 #(如 F#),<b>降号</b>加 b(如 Bb)。拿不准就空着。</div></div>
               <button class="cast"><span class="shine"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 8l-4 4 4 4M17 8l4 4-4 4M14 4l-4 16" stroke-linecap="round" stroke-linejoin="round"/></svg>翻译</button>
             </div>
           </div>
@@ -502,7 +506,9 @@ footer{margin-top:96px;border-top:1px solid var(--border);padding:60px 0 44px;ba
                   <label class="opt"><input type="radio" name="tr" value="basic-pitch"><span class="box"><span class="tick"></span><span><span class="ot">乐器 · 和弦 · 多个音</span><span class="od">同时响起的多个音<span class="tech">basic-pitch</span></span></span></span></label>
                   <label class="opt"><input type="radio" name="tr" value="bytedance"><span class="box"><span class="tick"></span><span><span class="ot">干净的钢琴独奏</span><span class="od">清晰录制的真钢琴<span class="tech">bytedance</span></span></span></span></label>
                 </div></div>
-              <div class="field"><div class="label">调<span class="opt-mark">选填</span></div><input class="input" placeholder="如 C · 留空便由它自己定调"></div>
+              <div class="field"><div class="label">调<span class="opt-mark">选填</span></div>
+                <input class="input" placeholder="如 C / G / D · 升号 F# · 降号 Bb · 留空自动定调">
+                <div class="help">大调写主音:<b>C D E F G A B</b>;<b>升号</b>加 #(F#、C#、G#…),<b>降号</b>加 b(Bb、Eb、Ab…)。拿不准就<b>留空</b>,它会自己听出调来,并把定的调写在谱头。</div></div>
               <button class="cast"><span class="shine"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4" stroke-linecap="round"/></svg>记谱</button>
             </div>
             <details class="help"><summary><span class="q">?</span>它怎么知道该用哪种耳朵<span class="chev">⌄</span></summary>

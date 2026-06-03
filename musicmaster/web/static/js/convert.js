@@ -57,6 +57,13 @@
         .finally(restore);
     });
 
+    MM.clearButton(panel, function () {
+      if (getFile.clear) getFile.clear();
+      if (btn._mmProg) btn._mmProg.hide();
+      if (paneTake) MM.renderDownloads(paneTake.querySelector('.dl-grid'), '', []);
+      MM.switchOut(panel, 0);
+    });
+
     function render(job, r) {
       var isJ2s = r.direction === 'j2s';
 
@@ -75,7 +82,7 @@
         var sheet = paneSheet.querySelector('.sheet');
         var jianpu = paneSheet.querySelector('.jianpu');
         if (isJ2s && r.staff_svg) {
-          if (sheet) { sheet.style.display = ''; sheet.innerHTML = r.staff_svg; }
+          if (sheet) { sheet.style.display = ''; sheet.innerHTML = r.staff_svg; MM.fitSheetSvg(sheet); }
           if (jianpu) jianpu.style.display = 'none';
         } else if (!isJ2s) {
           if (sheet) sheet.style.display = 'none'; // 隐藏 mockup 五线谱

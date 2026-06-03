@@ -24,7 +24,7 @@ import uuid
 import webbrowser
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -131,11 +131,14 @@ def api_job(job_id: str) -> JSONResponse:
 
 
 @app.get("/api/file/{job_id}/{name:path}")
-def api_file(job_id: str, name: str) -> FileResponse:
+def api_file(job_id: str, name: str, as_: str | None = Query(None, alias="as")) -> FileResponse:
     p = JM.file_path(job_id, name)
     if p is None:
         raise HTTPException(status_code=404, detail="文件不存在")
-    return FileResponse(str(p), filename=Path(name).name)
+    # 另存名:优先用前端传来的友好英文名(?as=),否则磁盘原名。只取 basename 防注入。
+    # (同源响应里 Content-Disposition 的 filename 优先级高于 <a download>,故必须在此对齐。)
+    dl_name = (Path(as_).name.strip() if as_ else "") or Path(name).name
+    return FileResponse(str(p), filename=dl_name)
 
 
 # ─────────── 静态站(必须在所有 /api 路由之后挂载,否则会吞掉它们)─────────── #

@@ -9,6 +9,33 @@
 (function () {
   'use strict';
 
+  // 安慰进度条文案:把扒谱(记谱)架构走一遍 —— 真实进度只有 ~30%(CREPE 跑)与 ~85% 两档,
+  // 中间长等待靠这些技术名词 + 极慢假进度给「仍在专注工作」的安全感。
+  var COMFORT_MSGS = [
+    '正在用 librosa 体检录音的真实带宽与采样质量…',
+    '正在加载 CREPE 深度音高跟踪模型(纯 CPU 推理)…',
+    '正在逐帧估计基频 f0,时间分辨率约 10ms…',
+    '正在用 Viterbi 解码把逐帧音高连成稳定音轨…',
+    '正在以 pyin 作「第二只耳朵」交叉验证音高…',
+    '正在比对两套估计的分歧,标出存疑片段…',
+    '正在做音符切分:把连续音高聚成一个个音…',
+    '正在估计每个音的起止时间与时值…',
+    '正在统计音高直方图,自动推断最可能的调…',
+    '正在把频率量化到十二平均律的音名…',
+    '正在用 music21 构建乐谱对象模型…',
+    '正在对齐节拍与小节线,规整时值…',
+    '正在生成 MusicXML(可导入打谱软件)…',
+    '正在调用 Verovio 渲染五线谱预览…',
+    '正在折算简谱:把音名映射成 1234567…',
+    '正在排版简谱的小节、附点与连音线…',
+    '正在生成 LilyPond 源码以便高质量出谱…',
+    '正在汇总逐音可信度,准备「想请你再听听」清单…',
+    '正在打包 notes.json / MIDI / 五线谱 / 简谱…',
+    '正在做最后一致性校验,确保各产物对齐…',
+    '模型仍在专注工作,长录音 / 复杂旋律会更久一些…',
+    '快好了 —— 正在收尾整理可下载文件…'
+  ];
+
   function init() {
     var MM = window.MM;
     if (!MM) return;
@@ -20,7 +47,7 @@
     var getFile = player ? MM.makeUploadPlayer(player, 'audio/*', null) : function () { return null; };
 
     var btn = panel.querySelector('.cast');
-    var prog = MM.progress(btn);
+    var prog = MM.progress(btn, { comfort: true, messages: COMFORT_MSGS });
 
     // ── 产出三 pane(按 DOM 顺序:解读 / 谱面 / 带走) ──
     var panes = panel.querySelectorAll('.out-body .out-pane');
@@ -105,7 +132,7 @@
     function renderSheet(result) {
       if (!paneSheet) return;
       var sheet = paneSheet.querySelector('.sheet');
-      if (sheet && result.staff_svg) sheet.innerHTML = result.staff_svg;
+      if (sheet && result.staff_svg) { sheet.innerHTML = result.staff_svg; MM.fitSheetSvg(sheet); }
     }
 
     // 带走 pane:下载网格
@@ -169,6 +196,15 @@
           .finally(restore);
       });
     }
+
+    MM.clearButton(panel, function () {
+      if (getFile.clear) getFile.clear();
+      if (btn && btn._mmProg) btn._mmProg.hide();
+      if (paneTake) MM.renderDownloads(paneTake.querySelector('.dl-grid'), '', []);
+      var au = panel.querySelectorAll('audio');
+      Array.prototype.forEach.call(au, function (a) { try { a.pause(); } catch (e) {} });
+      MM.switchOut(panel, 0);
+    });
   }
 
   if (document.readyState === 'loading') {

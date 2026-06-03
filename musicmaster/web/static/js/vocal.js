@@ -21,6 +21,33 @@
   var panel = MM.panel('vocal');
   if (!panel) return;
 
+  // 安慰进度条文案:把「修音准 → 换音色」两段式架构走一遍。整首高精度可能 20+ 分钟,
+  // 真实进度只有 ~15% / 50% / 92% 几个里程碑,长等待靠这些技术名词 + 极慢假进度撑住安全感。
+  var COMFORT_MSGS = [
+    '正在载入两段式管线:先修音准,再以你的音色重生成…',
+    '正在把原唱与目标旋律按时间轴对齐…',
+    '正在提取你原唱的逐帧音高曲线…',
+    '正在以目标旋律为参考,规划音准修正量…',
+    '正在启动扩散模型,按步数迭代修音准…',
+    '扩散采样进行中:步数越多越精细,也越慢…',
+    '正在整首自动分块,逐块修音以保留细节…',
+    '正在把修好的音准重采样到 44.1kHz…',
+    '正在载入 Seed-VC 音色转换模型(GPU)…',
+    '正在从你的清唱样本里提取音色指纹…',
+    '正在做内容与音色解耦:保留咬字,替换音色…',
+    '正在逐块重生成歌声,贴近你本人的声音…',
+    'cfg 引导中:在「像你」与「自然」之间找平衡…',
+    '正在跨块做交叉淡化,消除拼接痕迹…',
+    '正在统一响度与动态,避免忽大忽小…',
+    '正在对齐相位,减少分块边界的杂音…',
+    '正在合成最终歌声,保留气声与情感细节…',
+    '正在回采样并导出成品 wav…',
+    '正在保留「只修音准」的中间产物以备对照…',
+    '整首高精度可能要二十分钟以上,模型仍在努力…',
+    '正在做质量校验:确保在调、干净、仍是你…',
+    '快好了 —— 正在收尾整理成品与中间产物…'
+  ];
+
   // 三个上传:按索引对齐后端字段(0=原唱 raw / 1=去和声目标 ref / 2=音色锚 self_ref)。
   var drops = panel.querySelectorAll('.vc-ins .drop');
   var getRaw = drops[0] ? MM.makeDrop(drops[0]) : function () { return null; };
@@ -71,7 +98,7 @@
     fd.append('voice_steps', vsEl ? vsEl.value : '50');
     fd.append('voice_cfg', cfgEl ? cfgEl.value : '0.7');
 
-    var prog = MM.progress(btn);
+    var prog = MM.progress(btn, { comfort: true, messages: COMFORT_MSGS });
     var restore = MM.setBusy(btn, '提交中…');
     prog.start();
 
@@ -119,5 +146,15 @@
       prog.fail();
       MM.toast('' + e, 'error');
     }).finally(restore);
+  });
+
+  MM.clearButton(panel, function () {
+    if (getRaw.clear) getRaw.clear();
+    if (getRef.clear) getRef.clear();
+    if (getSelf.clear) getSelf.clear();
+    if (btn._mmProg) btn._mmProg.hide();
+    if (dlGrid) MM.renderDownloads(dlGrid, '', []);
+    var au = panel.querySelectorAll('audio');
+    Array.prototype.forEach.call(au, function (a) { try { a.pause(); } catch (e) {} });
   });
 })();
