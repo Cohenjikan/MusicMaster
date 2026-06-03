@@ -29,8 +29,17 @@
     var pane0 = panes[0];
     var pane1 = panes[1];
 
-    // 几束声音 pane:用其中第一个 .player 作模板,克隆生成每束音频的唱机
-    var playerTpl = pane0 ? pane0.querySelector('[data-player]') : null;
+    // 几束声音 pane:init 时缓存「放唱机的容器 playerHost」与模板 HTML 字符串。
+    // 关键:不可每次从 playerTpl.parentNode 反查 —— 首跑会把模板自身 detach,二次进入 parentNode 即 null
+    // 导致 querySelectorAll 抛 TypeError、成品丢失(修压测 M)。存 HTML 字符串则反复克隆永不失效。
+    var firstPlayer = pane0 ? pane0.querySelector('[data-player]') : null;
+    var playerHost = firstPlayer ? firstPlayer.parentNode : null;
+    var playerTplHTML = firstPlayer ? firstPlayer.outerHTML : null;
+    function clearPlayers() {
+      if (!playerHost) return;
+      var ps = playerHost.querySelectorAll('[data-player]');
+      Array.prototype.forEach.call(ps, function (el) { el.parentNode.removeChild(el); });
+    }
 
     if (!btn) return;
 
@@ -62,22 +71,22 @@
       if (dt) dt.textContent = tracks.length ? ('拆好了 · ' + tracks.length + ' 束声音') : '拆好了';
       if (dp) dp.textContent = (result && result.message) || '一束束,各自干净';
 
-      if (!playerTpl) return;
+      if (!playerHost || !playerTplHTML) return;
 
-      // 模板的父容器(放唱机的地方);清空其中所有现有唱机,按 tracks 重建
-      var host = playerTpl.parentNode;
-      var existing = host.querySelectorAll('[data-player]');
-      Array.prototype.forEach.call(existing, function (el) { host.removeChild(el); });
+      clearPlayers();  // 清掉现有唱机(含 mockup)后按 tracks 重建;模板是 HTML 字符串,反复跑不失效
 
       // .donelist 在 host 中的位置:把新唱机插到它前面,保持「唱机在上、清单在下」
       var doneList = pane0.querySelector('.donelist');
-      var anchor = (doneList && doneList.parentNode === host) ? doneList : null;
+      var anchor = (doneList && doneList.parentNode === playerHost) ? doneList : null;
 
       tracks.forEach(function (tr) {
-        var clone = playerTpl.cloneNode(true);
+        var tmp = document.createElement('div');
+        tmp.innerHTML = playerTplHTML;
+        var clone = tmp.firstElementChild;
+        if (!clone) return;
         var base = String(tr.name).split('/').pop();
-        if (anchor) host.insertBefore(clone, anchor);
-        else host.appendChild(clone);
+        if (anchor) playerHost.insertBefore(clone, anchor);
+        else playerHost.appendChild(clone);
         // 接真实音频(wirePlayer 内部会克隆控件以剥离 mockup 监听)
         MM.wirePlayer(clone, MM.fileUrl(jobId, tr.name), base, null);
       });
@@ -109,6 +118,7 @@
         if (dt) dt.textContent = '没能拆成';
         if (dp) dp.textContent = msg;
       }
+      clearPlayers();  // 清掉 mockup 的「干净主唱/伴奏」假唱机,失败时不显示假成品
       // 清空带走 pane,避免残留 mockup 下载项
       if (pane1) MM.renderDownloads(pane1.querySelector('.dl-grid'), '', []);
       MM.toast(msg, 'error');

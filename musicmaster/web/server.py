@@ -50,12 +50,18 @@ def _save_upload(up: UploadFile | None) -> str | None:
     (如 twinkle.musicxml、分离的 *_(Vocals)_*.wav)命名干净。文件名只取 basename 防穿越。"""
     if up is None or not up.filename:
         return None
-    safe = Path(up.filename).name or "upload"
+    # 文件名清洗:只取 basename,去首尾空白与 Windows 非法尾部(空格/点),空则回退 'upload'
+    # ——纯空白名(' ')在 Windows 上 open() 会抛 PermissionError,必须拦在前面(修压测 H1)。
+    safe = (Path(up.filename).name or "").strip().rstrip(" .") or "upload"
     sub = UPLOADS / uuid.uuid4().hex[:8]
-    sub.mkdir(parents=True, exist_ok=True)
-    dest = sub / safe
-    with open(dest, "wb") as f:
-        shutil.copyfileobj(up.file, f)
+    try:
+        sub.mkdir(parents=True, exist_ok=True)
+        dest = sub / safe
+        with open(dest, "wb") as f:
+            shutil.copyfileobj(up.file, f)
+    except OSError as e:
+        shutil.rmtree(sub, ignore_errors=True)  # 落盘失败清理刚建的子目录,不残留空目录(修压测 L)
+        raise HTTPException(status_code=400, detail=f"文件名或文件不合法,请重命名后重试({type(e).__name__})")
     return str(dest)
 
 
@@ -68,6 +74,8 @@ def health() -> dict:
 @app.post("/api/convert")
 def api_convert(file: UploadFile = File(...), direction: str = Form("j2s"),
                 key: str = Form("")) -> dict:
+    if direction not in ("j2s", "s2j"):
+        raise HTTPException(status_code=422, detail="未知转换方向,仅支持 j2s / s2j")
     path = _save_upload(file)
     job = JM.submit("convert", runners.run_convert, path, direction, key)
     return {"job_id": job.id}
@@ -84,8 +92,14 @@ def api_transcribe(audio: UploadFile = File(...), engine: str = Form("crepe"),
 @app.post("/api/separate")
 def api_separate(audio: UploadFile = File(...), stages: str = Form("1,2,3"),
                  denoise: str = Form("dereverb")) -> dict:
+    # 校验而非依赖 Form 默认回填掩盖空输入(修压测 L:stages=''/denoise='' 曾被静默当默认)
+    stage_list = [s.strip() for s in stages.split(",") if s.strip()]
+    if not stage_list or any(s not in ("1", "2", "3") for s in stage_list):
+        raise HTTPException(status_code=422, detail="处理段 stages 必须是 1/2/3 的非空子集,如 1,2,3")
+    if denoise not in ("dereverb", "deecho"):
+        raise HTTPException(status_code=422, detail="降噪方法 denoise 仅支持 dereverb / deecho")
     path = _save_upload(audio)
-    job = JM.submit("separate", runners.run_separate, path, stages, denoise)
+    job = JM.submit("separate", runners.run_separate, path, ",".join(stage_list), denoise)
     return {"job_id": job.id}
 
 
@@ -93,6 +107,13 @@ def api_separate(audio: UploadFile = File(...), stages: str = Form("1,2,3"),
 def api_vocal(raw: UploadFile = File(...), ref: UploadFile = File(...),
               self_ref: UploadFile = File(...), correct_steps: int = Form(150),
               voice_steps: int = Form(50), voice_cfg: float = Form(0.7)) -> dict:
+    # 数值参数夹紧 + 拒绝 NaN/Inf(修压测 M:负数/超界/天文数曾原样下传至 GPU 子进程)
+    import math
+    if not math.isfinite(voice_cfg):
+        raise HTTPException(status_code=422, detail="voice_cfg 必须是 0~1 的有限数")
+    correct_steps = max(1, min(1000, int(correct_steps)))
+    voice_steps = max(1, min(1000, int(voice_steps)))
+    voice_cfg = max(0.0, min(1.0, float(voice_cfg)))
     p_raw = _save_upload(raw)
     p_ref = _save_upload(ref)
     p_self = _save_upload(self_ref)

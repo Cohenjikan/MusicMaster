@@ -99,7 +99,7 @@ class JobManager:
                 job.progress = 1.0
                 job.stage = "完成"
                 job.updated_at = time.time()
-        except Exception as e:  # noqa: BLE001 — 任务管理器是兜底,任何意外都不该让 worker 线程静默死掉
+        except (Exception, SystemExit) as e:  # 含 SystemExit:runner 内 argparse 等误抛不致让任务永久卡 running(修压测 M)
             tb = traceback.format_exc()
             with job._lock:
                 job.status = "error"
@@ -119,10 +119,12 @@ class JobManager:
         if job is None:
             return None
         base = Path(job.job_dir).resolve()
-        # 只允许 job_dir 内的文件(name 可能含子目录,如分离产物);拒绝 .. 穿越
-        target = (base / name).resolve()
+        # 只允许 job_dir 内的文件(name 可能含子目录,如分离产物);拒绝 .. 穿越。
+        # resolve() 也纳入 try:畸形名(如含 NUL 字节)在 os.stat 时抛 ValueError/OSError,
+        # 必须接住返回 None(干净 404)而非冒泡成 500(修压测 L:NUL 字节 → 500)。
         try:
+            target = (base / name).resolve()
             target.relative_to(base)
-        except ValueError:
+        except (ValueError, OSError):
             return None
         return target if target.is_file() else None

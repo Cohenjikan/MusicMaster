@@ -97,6 +97,22 @@ def _read_svg(path: Optional[Path]) -> Optional[str]:
     return None
 
 
+def _norm_key(key: str):
+    """校验并规范化用户输入的调名。合法 → 主音大写的规范串(如 g→G、bb→Bb、F#→F#);
+    无效 → None(调用方据此报错);空 → ''(交给自动定调)。music21 用 - 表示降号,故校验时转换。"""
+    if not key or not key.strip():
+        return ""
+    s = key.strip()
+    letter = s[0].upper()
+    acc = s[1:].replace("♯", "#").replace("♭", "b")
+    try:
+        from music21 import pitch as _p
+        _p.Pitch(letter + acc.replace("b", "-"))  # 解析失败抛异常 = 非法调名
+        return letter + acc
+    except Exception:  # noqa: BLE001
+        return None
+
+
 # ─────────────────────────── 互译 ─────────────────────────── #
 def run_convert(job, file_path: str, direction: str, key: str = "") -> dict:
     """direction: 'j2s' 简谱→五线谱(MusicXML) | 's2j' 五线谱→简谱。"""
@@ -109,6 +125,9 @@ def run_convert(job, file_path: str, direction: str, key: str = "") -> dict:
         if direction == "j2s":
             job.set_stage("解析简谱 → 生成 MusicXML", 0.4)
             score = cv.load_any(src)
+            if not list(score.flatten().notes):  # 0 个真实音符 = 啥都没解析出来,别谎报成功(修压测 M)
+                return {"ok": False, "direction": direction, "staff_svg": None, "jianpu_text": None,
+                        "downloads": [], "message": "未从输入中解析出任何音符,请检查简谱格式(参见 examples/twinkle.jianpu)。"}
             out = d / (src.stem + ".musicxml")
             score.write("musicxml", fp=str(out))
             staff_svg = None
@@ -124,9 +143,16 @@ def run_convert(job, file_path: str, direction: str, key: str = "") -> dict:
                     "direction": direction, "staff_svg": staff_svg, "jianpu_text": None,
                     "downloads": _downloads(d)}
         else:  # s2j
+            norm_key = _norm_key(key)  # 校验+规范化调名(修压测 M:非法/小写 key 曾原样写进表头致音高矛盾)
+            if key and key.strip() and norm_key is None:
+                return {"ok": False, "direction": direction, "staff_svg": None, "jianpu_text": None,
+                        "downloads": [], "message": f"无法识别调名「{key.strip()}」,合法如 C / G / D / A / E / B / F# / Bb / Eb 等。"}
             job.set_stage("解析五线谱 → 译回简谱", 0.5)
             score = cv.load_any(src)
-            text = cv.score_to_jianpu(score, key_name=(key or None))
+            if not list(score.flatten().notes):
+                return {"ok": False, "direction": direction, "staff_svg": None, "jianpu_text": None,
+                        "downloads": [], "message": "未从输入中解析出任何音符,请检查文件是否为有效乐谱。"}
+            text = cv.score_to_jianpu(score, key_name=(norm_key or None))
             out = d / (src.stem + ".jianpu")
             out.write_text(text, encoding="utf-8")
             return {"ok": True, "message": "已译回简谱文本。",
@@ -140,9 +166,14 @@ def run_convert(job, file_path: str, direction: str, key: str = "") -> dict:
 def run_transcribe(job, audio_path: str, engine: str = "crepe", key: str = "") -> dict:
     if not audio_path:
         return {"ok": False, "message": "请先上传清唱音频。"}
+    from musicmaster.transcribe import autopilot
+    _engines = getattr(autopilot, "ENGINES", ("crepe", "basic-pitch", "bytedance"))
+    if engine not in _engines:  # 未知引擎会让 autopilot 的 argparse 抛 SystemExit 逃逸 except,卡死任务(修压测 M)
+        return {"ok": False, "report_md": None, "staff_svg": None, "confidence_pct": None,
+                "spots": None, "downloads": [],
+                "message": f"未知引擎「{engine}」,可选:{', '.join(_engines)}。"}
     d = Path(job.job_dir)
     try:
-        from musicmaster.transcribe import autopilot
         job.set_stage(f"记谱中(引擎 {engine}:体检 → 转录 → 定调 → 渲染 → 可信度)", 0.3)
         argv = [str(audio_path), "--out", str(d), "--engine", engine]
         if key and key.strip():
