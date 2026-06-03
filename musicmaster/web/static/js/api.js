@@ -189,9 +189,11 @@
     return function () { return current; };
   };
 
-  /* 把一个 [data-player] 唱机(设计里是播放 mockup)接成上传控件:点击唱机/封面打开文件选择,
-     选中后把文件名写进 .pname,并回调 onFile(file)。返回 () => 当前 File|null。 */
-  MM.makeUpload = function (player, accept, onFile) {
+  /* 把一个 [data-player] 唱机接成「上传 + 真实预览」控件:
+     点唱机封面(.deck)打开文件选择;选中后唱机直接用真实 <audio> 播放该文件
+     (播放/暂停、可拖动进度、真实倍速),文件名写进 .pname,并回调 onFile(file)。
+     返回 () => 当前 File|null。设计稿里这些唱机本是无声 mockup —— 这里换成真声。 */
+  MM.makeUploadPlayer = function (player, accept, onFile) {
     var input = document.createElement('input');
     input.type = 'file'; input.hidden = true; if (accept) input.accept = accept;
     player.appendChild(input);
@@ -199,12 +201,26 @@
     var sub = nameEl ? nameEl.querySelector('.psub') : null;
     var subText = sub ? sub.outerHTML : '';
     var deck = player.querySelector('.deck') || player;
-    var current = null;
     deck.style.cursor = 'pointer';
     deck.title = '点击选择音频文件';
+
+    // 真实音频:先把控件接好(剥离 mockup 假播放),之后每选一个文件只换 src 即可反复预览。
+    var audio = new Audio(); audio.preload = 'metadata';
+    wireAudio(player, audio);
+
+    var current = null, objUrl = null;
     function set(file) {
       current = file || null;
-      if (nameEl) nameEl.innerHTML = MM.esc(current ? current.name : '点击唱机选择音频') + ' ' + subText;
+      if (objUrl) { try { URL.revokeObjectURL(objUrl); } catch (_) {} objUrl = null; }
+      try { audio.pause(); } catch (_) {}
+      if (current) {
+        objUrl = URL.createObjectURL(current);
+        audio.src = objUrl; try { audio.load(); } catch (_) {}
+        if (nameEl) nameEl.innerHTML = MM.esc(current.name) + ' ' + subText;
+      } else {
+        audio.removeAttribute('src'); try { audio.load(); } catch (_) {}
+        if (nameEl) nameEl.innerHTML = MM.esc('点击唱机选择音频') + ' ' + subText;
+      }
       if (typeof onFile === 'function') onFile(current);
     }
     deck.addEventListener('click', function () { input.click(); });
@@ -221,10 +237,86 @@
   var PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
   var PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
 
-  /* 用真实音频驱动设计稿里的唱机视觉。会克隆播放/进度控件以剥离 mockup 监听,再接真实 <audio>。
-     title/sub 可选,用于更新 .pname/.ptitle 与 .psub/.psubt。 */
+  /* 内核:用真实 <audio> 驱动一个唱机的所有控件。
+     先克隆 .pplay/.pbar/.pspeed 以剥离设计稿 mockup 的假监听(假播放/假拖动/假倍速),
+     再绑定真实播放:播放/暂停、进度可点击+可拖动 seek、真实时间、真实倍速、转盘随播放转。
+     audio 会被挂到 player 下(隐藏、无 controls)以存活并便于调试。返回该 <audio>。 */
+  function wireAudio(player, audio) {
+    var play = player.querySelector('.pplay');
+    if (play) { var np = play.cloneNode(true); play.parentNode.replaceChild(np, play); play = np; }
+    var bar = player.querySelector('.pbar');
+    if (bar) { var nb = bar.cloneNode(true); bar.parentNode.replaceChild(nb, bar); bar = nb; }
+    var speed = player.querySelector('.pspeed');
+    if (speed) { var ns = speed.cloneNode(true); speed.parentNode.replaceChild(ns, speed); speed = ns; }
+
+    var fill = bar ? bar.querySelector('.pfill') : null;
+    var thumb = bar ? bar.querySelector('.pthumb') : null;
+    var time = player.querySelector('.ptime');
+    var vinyl = player.querySelector('.vinyl');
+
+    // 初始统一为「未播放」(showpiece 设计稿默认带 is-playing,这里收回,避免无声却在转)
+    if (play) play.innerHTML = PLAY;
+    player.classList.remove('is-playing');
+    if (vinyl) vinyl.classList.remove('spin');
+    try { audio.style.display = 'none'; player.appendChild(audio); } catch (_) {}
+
+    function render() {
+      var d = audio.duration; if (!isFinite(d) || d <= 0) d = 0;
+      var c = audio.currentTime || 0, p = d ? c / d : 0;
+      if (fill) fill.style.width = (p * 100).toFixed(1) + '%';
+      if (thumb) thumb.style.left = (p * 100).toFixed(1) + '%';
+      if (time) time.textContent = MM.fmtTime(c) + ' / ' + MM.fmtTime(d);
+    }
+    if (play) play.addEventListener('click', function () {
+      if (audio.paused) { var pr = audio.play(); if (pr && pr.catch) pr.catch(function () {}); }
+      else audio.pause();
+    });
+    audio.addEventListener('play', function () { if (play) play.innerHTML = PAUSE; player.classList.add('is-playing'); });
+    audio.addEventListener('pause', function () { if (play) play.innerHTML = PLAY; player.classList.remove('is-playing'); });
+    audio.addEventListener('ended', function () { if (play) play.innerHTML = PLAY; player.classList.remove('is-playing'); });
+    audio.addEventListener('timeupdate', render);
+    audio.addEventListener('loadedmetadata', render);
+    audio.addEventListener('durationchange', render);
+
+    if (bar) {
+      var dragging = false;
+      function seek(clientX) {
+        var r = bar.getBoundingClientRect();
+        var p = Math.min(1, Math.max(0, (clientX - r.left) / (r.width || 1)));
+        var d = audio.duration;
+        if (isFinite(d) && d > 0) audio.currentTime = p * d;
+        // 元数据未就绪也先移动视觉,放手不会「失效」
+        if (fill) fill.style.width = (p * 100).toFixed(1) + '%';
+        if (thumb) thumb.style.left = (p * 100).toFixed(1) + '%';
+      }
+      bar.addEventListener('pointerdown', function (e) {
+        dragging = true; bar.classList.add('dragging');
+        try { bar.setPointerCapture(e.pointerId); } catch (_) {}
+        seek(e.clientX); e.preventDefault();
+      });
+      bar.addEventListener('pointermove', function (e) { if (dragging) seek(e.clientX); });
+      function stop() { dragging = false; bar.classList.remove('dragging'); }
+      bar.addEventListener('pointerup', stop);
+      bar.addEventListener('pointercancel', stop);
+      window.addEventListener('pointerup', stop);
+    }
+
+    if (speed) {
+      var speeds = [1, 1.5, 2], si = 0, base = 3.6;
+      speed.addEventListener('click', function () {
+        si = (si + 1) % speeds.length; var v = speeds[si];
+        speed.textContent = v + '×';
+        audio.playbackRate = v;
+        if (vinyl) vinyl.style.setProperty('--spin', (base / v).toFixed(2) + 's');
+      });
+    }
+
+    render();
+    return audio;
+  }
+
+  /* 用真实音频驱动结果唱机。title/sub 可选,更新 .pname/.ptitle 与 .psub/.psubt。 */
   MM.wirePlayer = function (player, url, title, sub) {
-    // 标题
     var t = player.querySelector('.ptitle') || player.querySelector('.pname');
     var subEl = player.querySelector('.psubt') || (player.querySelector('.pname') && player.querySelector('.psub'));
     if (t && title != null) {
@@ -234,37 +326,8 @@
       } else { t.textContent = title; }
     }
     if (subEl && subEl.classList && subEl.classList.contains('psubt') && sub != null) subEl.textContent = sub;
-
     var audio = new Audio(url); audio.preload = 'metadata';
-    var fill = player.querySelector('.pfill'), thumb = player.querySelector('.pthumb'),
-        time = player.querySelector('.ptime'), bar = player.querySelector('.pbar'),
-        vinyl = player.querySelector('.vinyl');
-    // 克隆播放按钮 → 去掉 mockup 监听
-    var play = player.querySelector('.pplay');
-    if (play) { var np = play.cloneNode(true); play.parentNode.replaceChild(np, play); play = np; play.innerHTML = PLAY; }
-
-    function render() {
-      var d = audio.duration || 0, c = audio.currentTime || 0, p = d ? c / d : 0;
-      if (fill) fill.style.width = (p * 100).toFixed(1) + '%';
-      if (thumb) thumb.style.left = (p * 100).toFixed(1) + '%';
-      if (time) time.textContent = MM.fmtTime(c) + ' / ' + MM.fmtTime(d);
-    }
-    if (play) play.addEventListener('click', function () { audio.paused ? audio.play() : audio.pause(); });
-    audio.addEventListener('play', function () { if (play) play.innerHTML = PAUSE; player.classList.add('is-playing'); if (vinyl) vinyl.classList.add('spin'); });
-    audio.addEventListener('pause', function () { if (play) play.innerHTML = PLAY; player.classList.remove('is-playing'); if (vinyl) vinyl.classList.remove('spin'); });
-    audio.addEventListener('ended', function () { if (play) play.innerHTML = PLAY; });
-    audio.addEventListener('timeupdate', render);
-    audio.addEventListener('loadedmetadata', render);
-    if (bar) {
-      var nb = bar.cloneNode(true); bar.parentNode.replaceChild(nb, bar); bar = nb;
-      fill = bar.querySelector('.pfill'); thumb = bar.querySelector('.pthumb');
-      bar.addEventListener('click', function (e) {
-        var r = bar.getBoundingClientRect(), p = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
-        if (audio.duration) audio.currentTime = p * audio.duration;
-      });
-    }
-    render();
-    return audio;
+    return wireAudio(player, audio);
   };
 
   window.MM = MM;

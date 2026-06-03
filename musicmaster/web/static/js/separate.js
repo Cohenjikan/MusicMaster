@@ -21,7 +21,7 @@
     // 输入唱机:.card 内第一个 [data-player],接成上传控件
     var inputPlayer = panel.querySelector('.card [data-player]');
     var getFile = inputPlayer
-      ? MM.makeUpload(inputPlayer, 'audio/*', null)
+      ? MM.makeUploadPlayer(inputPlayer, 'audio/*', null)
       : function () { return null; };
 
     // 两个产出子面板:0=几束声音、1=带走(按 index.html 中的出现顺序)

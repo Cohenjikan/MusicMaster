@@ -17,7 +17,7 @@
 
     // ── 输入:音频上传(唱机)、引擎(单选)、调(选填) ──
     var player = panel.querySelector('.card [data-player]');
-    var getFile = player ? MM.makeUpload(player, 'audio/*', null) : function () { return null; };
+    var getFile = player ? MM.makeUploadPlayer(player, 'audio/*', null) : function () { return null; };
 
     var btn = panel.querySelector('.cast');
 
