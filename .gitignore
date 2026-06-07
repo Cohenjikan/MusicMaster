@@ -75,3 +75,7 @@ desktop.ini
 .vscode/
 *.swp
 _demo_vocal/
+
+# ── README / promo media (committed deliverables, override the global *.mp4 ignore) ──
+!docs/assets/
+!docs/assets/promo.mp4
