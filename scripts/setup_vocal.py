@@ -12,7 +12,7 @@
 注:Seed-VC 用它自己锁定版本的 requirements(torch==2.4 等),故与 DiffPitcher 分两个 venv。
 """
 from __future__ import annotations
-import argparse, os, shutil, subprocess, sys, venv
+import argparse, os, shutil, subprocess, sys, venv, urllib.request
 from pathlib import Path
 
 # 系统 Python + GBK 控制台:输出/重定向遇非 GBK 字符会 UnicodeEncodeError,统一切 UTF-8(防御式)
@@ -78,6 +78,37 @@ def filtered_seedvc_requirements(req: Path) -> Path:
     return out
 
 
+DIFFPITCHER_WEIGHTS = (
+    "ckpts/world_fixed_40.pt",
+    "ckpts/bigvgan_24khz_100band/g_05000000.pt",
+    "ckpts/bigvgan_24khz_100band/config.json",
+    "ckpts/ckpt_transformer_pitch/transformer_pitch_360.pt",
+)
+
+
+def download_diffpitcher_weights() -> None:
+    """从 HF 镜像拉取 DiffPitcher 权重到 vendor/DiffPitcher/ckpts/(断点续传靠 curl)。"""
+    if not DP_DIR.exists():
+        return
+    endpoint = os.environ.get("HF_ENDPOINT", "https://hf-mirror.com").rstrip("/")
+    for rel in DIFFPITCHER_WEIGHTS:
+        dst = DP_DIR / rel
+        if dst.is_file() and dst.stat().st_size > 0:
+            print(f"[weights] 已存在 {rel}")
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        url = f"{endpoint}/Higobeatz/Diff-Pitcher/resolve/main/{rel}"
+        print(f"[weights] 下载 {rel} ← {endpoint}")
+        try:
+            if os.name == "nt":
+                subprocess.check_call(["curl", "-L", "-C", "-", "--retry", "5",
+                                       "--retry-delay", "3", "-o", str(dst), url])
+            else:
+                urllib.request.urlretrieve(url, str(dst))
+        except Exception as exc:
+            print(f"[weights] {rel} 下载失败: {exc};可稍后手动重试")
+
+
 def venv_python(d: Path) -> Path:
     return d / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
@@ -115,7 +146,9 @@ def main():
         npy = str(venv_python(neural))
         subprocess.check_call([npy, "-m", "pip", "install", "-U", "pip"])
         install_torch(lambda *args: subprocess.check_call([npy, "-m", "pip", *args]), a.cuda)
-        subprocess.check_call([npy, "-m", "pip", "install", "-r", str(ROOT / "requirements" / "requirements-vocal.txt")])
+        subprocess.check_call([npy, "-m", "pip", "install", "-r",
+                               str(ROOT / "requirements" / "requirements-vocal.txt"),
+                               "-i", PYPI_MIRROR, "--timeout", "60", "--retries", "5"])
 
         # ── Seed-VC venv(用其自带 requirements,版本锁定)──
         svc = VENDOR / ".venv-svc"
@@ -131,10 +164,11 @@ def main():
                           SVC_TORCH_VERSION, SVC_TORCHAUDIO_VERSION, with_vision=True)
             req = filtered_seedvc_requirements(req)
             subprocess.check_call([spy, "-m", "pip", "install", "-r", str(req),
-                                   "--timeout", "60", "--retries", "5"])
+                                   "-i", PYPI_MIRROR, "--timeout", "60", "--retries", "5"])
 
+    download_diffpitcher_weights()
     print("\n-------- 权重 --------")
-    print("- DiffPitcher:把 ckpts/ 放到 vendor/DiffPitcher/ckpts/:")
+    print("- DiffPitcher:权重已尝试从 HF 镜像拉取到 vendor/DiffPitcher/ckpts/:")
     print("    - world_fixed_40.pt")
     print("    - bigvgan_24khz_100band/g_05000000.pt + config.json")
     print("  (来源见 DiffPitcher 仓库 README / HF;MIT)")

@@ -64,7 +64,8 @@ def main():
     print(f"[3/4] 装 CUDA torch({a.cuda})")
     install_torch(run, a.cuda)
     print("[4/4] 装 audio-separator + 本包(供 -m musicmaster.separate.pipeline)")
-    run("install", "-r", str(ROOT / "requirements" / "requirements-sep.txt"))
+    run("install", "-r", str(ROOT / "requirements" / "requirements-sep.txt"),
+        "-i", PYPI_MIRROR, "--timeout", "60", "--retries", "5")
     run("install", "-e", str(ROOT), "--no-deps")
 
     print("\n[OK] 完成。把这个加进你的环境变量(GUI/CLI 用它找分离 venv):")
