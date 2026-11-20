@@ -25,9 +25,26 @@ ROOT = Path(__file__).resolve().parents[1]
 VENDOR = ROOT / "vendor"
 DP_DIR = VENDOR / "DiffPitcher"
 SVC_DIR = VENDOR / "seed-vc"
-DP_REPO = "https://github.com/haidog-yaqub/DiffPitcher"
-SVC_REPO = "https://github.com/Plachtaa/seed-vc"
+# 国内网络:git clone 走 GitHub 镜像(可用 MUSICMASTER_GH_MIRROR 覆盖);权重走 HF 镜像。
+GH_MIRROR = os.environ.get("MUSICMASTER_GH_MIRROR", "https://mirror.mikus.ink/https://github.com/")
+os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+DP_REPO = GH_MIRROR.rstrip("/") + "/haidog-yaqub/DiffPitcher"
+SVC_REPO = GH_MIRROR.rstrip("/") + "/Plachtaa/seed-vc"
 DP_SCRIPTS = ROOT / "musicmaster" / "vocal" / "diffpitcher_scripts"
+# 国内加速:Windows 上 PyPI 的 torch 轮子经 nvidia-* 依赖自带 CUDA 12.4 运行库,
+# 走阿里云 PyPI 镜像即可,避免 download.pytorch.org 的 2.5GB 单文件下载超时。
+TORCH_VERSION = os.environ.get("MUSICMASTER_TORCH_VERSION", "2.6.0")
+PYPI_MIRROR = os.environ.get("MUSICMASTER_PYPI_MIRROR", "https://mirrors.aliyun.com/pypi/simple/")
+
+
+def install_torch(run, cuda: str) -> None:
+    """国内走 PyPI 镜像;其他平台回退 PyTorch 官方 CUDA 索引。"""
+    if os.name == "nt":
+        print(f"      [torch] 国内镜像: {PYPI_MIRROR} (torch=={TORCH_VERSION},含 CUDA 12.4 运行库)")
+        run("install", f"torch=={TORCH_VERSION}", f"torchaudio=={TORCH_VERSION}",
+            "-i", PYPI_MIRROR, "--timeout", "60", "--retries", "5")
+    else:
+        run("install", "torch", "torchaudio", "--index-url", f"https://download.pytorch.org/whl/{cuda}")
 
 
 def venv_python(d: Path) -> Path:
@@ -62,17 +79,18 @@ def main():
         # ── DiffPitcher venv ──
         neural = VENDOR / ".venv-neural"
         print(f"[venv] {neural}")
-        venv.create(neural, with_pip=True)
+        if not venv_python(neural).exists():
+            venv.create(neural, with_pip=True)
         npy = str(venv_python(neural))
         subprocess.check_call([npy, "-m", "pip", "install", "-U", "pip"])
-        subprocess.check_call([npy, "-m", "pip", "install", "torch", "torchaudio",
-                               "--index-url", f"https://download.pytorch.org/whl/{a.cuda}"])
-        subprocess.check_call([npy, "-m", "pip", "install", "-r", str(ROOT / "requirements-vocal.txt")])
+        install_torch(lambda *args: subprocess.check_call([npy, "-m", "pip", *args]), a.cuda)
+        subprocess.check_call([npy, "-m", "pip", "install", "-r", str(ROOT / "requirements" / "requirements-vocal.txt")])
 
         # ── Seed-VC venv(用其自带 requirements,版本锁定)──
         svc = VENDOR / ".venv-svc"
         print(f"[venv] {svc}")
-        venv.create(svc, with_pip=True)
+        if not venv_python(svc).exists():
+            venv.create(svc, with_pip=True)
         spy = str(venv_python(svc))
         subprocess.check_call([spy, "-m", "pip", "install", "-U", "pip"])
         req = SVC_DIR / "requirements.txt"

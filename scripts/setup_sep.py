@@ -18,6 +18,20 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 ROOT = Path(__file__).resolve().parents[1]
+# 国内加速:Windows 上 PyPI 的 torch 轮子经 nvidia-* 依赖自带 CUDA 12.4 运行库,
+# 走阿里云 PyPI 镜像即可,避免 download.pytorch.org 的 2.5GB 单文件下载超时。
+TORCH_VERSION = os.environ.get("MUSICMASTER_TORCH_VERSION", "2.6.0")
+PYPI_MIRROR = os.environ.get("MUSICMASTER_PYPI_MIRROR", "https://mirrors.aliyun.com/pypi/simple/")
+
+
+def install_torch(run, cuda: str) -> None:
+    """国内走 PyPI 镜像;其他平台回退 PyTorch 官方 CUDA 索引。"""
+    if os.name == "nt":
+        print(f"      国内镜像: {PYPI_MIRROR} (torch=={TORCH_VERSION},含 CUDA 12.4 运行库)")
+        run("install", f"torch=={TORCH_VERSION}", f"torchaudio=={TORCH_VERSION}",
+            "-i", PYPI_MIRROR, "--timeout", "60", "--retries", "5")
+    else:
+        run("install", "torch", "torchaudio", "--index-url", f"https://download.pytorch.org/whl/{cuda}")
 
 
 def venv_python(d: Path) -> Path:
@@ -32,8 +46,11 @@ def main():
     vdir = Path(a.venv)
     vdir.parent.mkdir(parents=True, exist_ok=True)
 
-    print(f"[1/4] 建 {vdir}")
-    venv.create(vdir, with_pip=True)
+    if venv_python(vdir).exists():
+        print(f"[1/4] 复用已有虚拟环境 {vdir}")
+    else:
+        print(f"[1/4] 建 {vdir}")
+        venv.create(vdir, with_pip=True)
     py = str(venv_python(vdir))
 
     def run(*pip_args):
@@ -42,9 +59,9 @@ def main():
     print("[2/4] 升级 pip")
     run("install", "-U", "pip")
     print(f"[3/4] 装 CUDA torch({a.cuda})")
-    run("install", "torch", "torchaudio", "--index-url", f"https://download.pytorch.org/whl/{a.cuda}")
+    install_torch(run, a.cuda)
     print("[4/4] 装 audio-separator + 本包(供 -m musicmaster.separate.pipeline)")
-    run("install", "-r", str(ROOT / "requirements-sep.txt"))
+    run("install", "-r", str(ROOT / "requirements" / "requirements-sep.txt"))
     run("install", "-e", str(ROOT), "--no-deps")
 
     print("\n[OK] 完成。把这个加进你的环境变量(GUI/CLI 用它找分离 venv):")
