@@ -82,3 +82,6 @@ _demo_vocal/
 
 # 用户本地示例目录(不入库)
 示例/
+
+# Local vendor sources / venvs
+vendor/

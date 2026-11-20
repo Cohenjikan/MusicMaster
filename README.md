@@ -263,7 +263,7 @@ python scripts/setup_sep.py      # 分离环境 .venv-sep(audio-separator + CUDA
 python scripts/setup_vocal.py    # 修音 .venv-neural(DiffPitcher) + 换音色 .venv-svc(Seed-VC) + 拉取权重
 ```
 
-脚本会在 `vendor/` 下拉取源码、建立对应 venv、下载权重。完成后把路径告知程序(优先级:**环境变量 > `paths.local.json`**):复制 `paths.local.json.example` 为 `paths.local.json` 并填好(使用正斜杠 `/`),该文件不入库,启动时自动读取。
+脚本会在 `vendor/` 下拉取源码、建立对应 venv、下载权重。国内网络默认已加速:GitHub 走 `mirror.mikus.ink`、Hugging Face 走 `hf-mirror.com`、PyPI 走腾讯云、PyTorch CUDA 轮子走 `mirrors.cloud.tencent.com/pytorch-wheels/whl/cu124/`(Windows 上 PyPI 的 torch 是 CPU 版,必须用 CUDA 索引)。完成后把路径告知程序(优先级:**环境变量 > `paths.local.json`**):复制 `paths.local.json.example` 为 `paths.local.json` 并填好(使用正斜杠 `/`),该文件不入库,启动时自动读取。
 
 | `paths.local.json` 键 / 环境变量 | 指向 |
 |---|---|
