@@ -3,7 +3,7 @@
 # 权重 ckpts/(world_fixed_40.pt + bigvgan_24khz_100band)随 DiffPitcher 仓库下载(见 scripts/setup_vocal)。
 #
 # torch/torchaudio 按 CUDA 版本单独安装(本项目验证于 cu124):
-#   pip install torch torchaudio -i https://mirrors.cloud.tencent.com/pypi/simple/
+#   pip install torch torchaudio --index-url https://mirrors.cloud.tencent.com/pytorch-wheels/whl/cu124/
 
 torchcrepe>=0.0.22
 diffusers

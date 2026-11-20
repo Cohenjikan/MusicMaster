@@ -18,18 +18,21 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 ROOT = Path(__file__).resolve().parents[1]
-# 国内加速:Windows 上 PyPI 的 torch 轮子经 nvidia-* 依赖自带 CUDA 12.4 运行库。
-# 实测腾讯云 PyPI 镜像 ~4 MB/s,阿里云仅 ~30 KB/s(2026-11),故默认走腾讯云。
+# 国内加速:Windows 上 PyPI 的 torch 轮子是 CPU 版(无 nvidia-* 依赖),
+# 必须走 PyTorch CUDA 索引;腾讯云镜像了整套 /whl/cu124/(实测 ~20 MB/s),别用官方站。
 TORCH_VERSION = os.environ.get("MUSICMASTER_TORCH_VERSION", "2.6.0")
 PYPI_MIRROR = os.environ.get("MUSICMASTER_PYPI_MIRROR", "https://mirrors.cloud.tencent.com/pypi/simple/")
+PYTORCH_MIRROR = os.environ.get(
+    "MUSICMASTER_PYTORCH_MIRROR", "https://mirrors.cloud.tencent.com/pytorch-wheels/whl/{cuda}/")
 
 
 def install_torch(run, cuda: str) -> None:
-    """国内走 PyPI 镜像;其他平台回退 PyTorch 官方 CUDA 索引。"""
+    """Windows 走腾讯云 PyTorch CUDA 镜像;其他平台回退 PyTorch 官方索引。"""
     if os.name == "nt":
-        print(f"      国内镜像: {PYPI_MIRROR} (torch=={TORCH_VERSION},含 CUDA 12.4 运行库)")
+        idx = PYTORCH_MIRROR.format(cuda=cuda)
+        print(f"      PyTorch CUDA 镜像: {idx} (torch=={TORCH_VERSION})")
         run("install", f"torch=={TORCH_VERSION}", f"torchaudio=={TORCH_VERSION}",
-            "-i", PYPI_MIRROR, "--timeout", "60", "--retries", "5")
+            "--index-url", idx, "--timeout", "60", "--retries", "5")
     else:
         run("install", "torch", "torchaudio", "--index-url", f"https://download.pytorch.org/whl/{cuda}")
 

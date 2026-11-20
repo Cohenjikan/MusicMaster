@@ -31,19 +31,21 @@ os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 DP_REPO = GH_MIRROR.rstrip("/") + "/haidog-yaqub/DiffPitcher"
 SVC_REPO = GH_MIRROR.rstrip("/") + "/Plachtaa/seed-vc"
 DP_SCRIPTS = ROOT / "musicmaster" / "vocal" / "diffpitcher_scripts"
-# 国内加速:Windows 上 PyPI 的 torch 轮子经 nvidia-* 依赖自带 CUDA 12.4 运行库。
-# 实测腾讯云 PyPI 镜像 ~4 MB/s,阿里云仅 ~30 KB/s(2026-11),故默认走腾讯云。
+# 国内加速:Windows 上 PyPI 的 torch 轮子是 CPU 版(无 nvidia-* 依赖),
+# 必须走 PyTorch CUDA 索引;腾讯云镜像了整套 /whl/cu124/(实测 ~20 MB/s),别用官方站。
 TORCH_VERSION = os.environ.get("MUSICMASTER_TORCH_VERSION", "2.6.0")
 # Seed-VC 自带 requirements 锁 2.4.0 / 0.19.0 / 2.4.0,单独一套,别和 DiffPitcher 混。
 SVC_TORCH_VERSION = os.environ.get("MUSICMASTER_SVC_TORCH_VERSION", "2.4.0")
 SVC_TORCHVISION_VERSION = os.environ.get("MUSICMASTER_SVC_TORCHVISION_VERSION", "0.19.0")
 SVC_TORCHAUDIO_VERSION = os.environ.get("MUSICMASTER_SVC_TORCHAUDIO_VERSION", "2.4.0")
 PYPI_MIRROR = os.environ.get("MUSICMASTER_PYPI_MIRROR", "https://mirrors.cloud.tencent.com/pypi/simple/")
+PYTORCH_MIRROR = os.environ.get(
+    "MUSICMASTER_PYTORCH_MIRROR", "https://mirrors.cloud.tencent.com/pytorch-wheels/whl/{cuda}/")
 
 
 def install_torch(run, cuda: str, torch_version: str | None = None,
                   torchaudio_version: str | None = None, with_vision: bool = False) -> None:
-    """国内走 PyPI 镜像;其他平台回退 PyTorch 官方 CUDA 索引。"""
+    """Windows 走腾讯云 PyTorch CUDA 镜像;其他平台回退 PyTorch 官方索引。"""
     tv = torch_version or TORCH_VERSION
     ta = torchaudio_version or tv
     pkgs = [f"torch=={tv}"]
@@ -51,8 +53,9 @@ def install_torch(run, cuda: str, torch_version: str | None = None,
         pkgs.append(f"torchvision=={SVC_TORCHVISION_VERSION}")
     pkgs.append(f"torchaudio=={ta}")
     if os.name == "nt":
-        print(f"      [torch] 国内镜像: {PYPI_MIRROR} ({', '.join(pkgs)})")
-        run("install", *pkgs, "-i", PYPI_MIRROR, "--timeout", "60", "--retries", "5")
+        idx = PYTORCH_MIRROR.format(cuda=cuda)
+        print(f"      [torch] CUDA 镜像: {idx} ({', '.join(pkgs)})")
+        run("install", *pkgs, "--index-url", idx, "--timeout", "60", "--retries", "5")
     else:
         run("install", *pkgs, "--index-url", f"https://download.pytorch.org/whl/{cuda}")
 
@@ -61,7 +64,7 @@ def filtered_seedvc_requirements(req: Path) -> Path:
     """剔除 seed-vc requirements 开头的 nightly --index-url 行(会直连 download.pytorch.org 卡死)。
 
     保留其锁定的 torch==2.4.0 / torchvision==0.19.0 / torchaudio==2.4.0;
-    这些会由 install_torch 先从国内 PyPI 镜像装好,pip 看到已满足就不会重下。
+    这些会由 install_torch 先从腾讯云 PyTorch CUDA 镜像装好,pip 看到已满足就不会重下。
     """
     out = VENDOR / "_seed-vc-requirements-filtered.txt"
     lines = []

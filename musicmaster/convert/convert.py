@@ -29,7 +29,7 @@
 统一导入接口:load_any(path) → music21 Score(新格式按 _LOADERS 注册即可扩展)。
 """
 from __future__ import annotations
-import argparse, importlib, re, sys
+import argparse, importlib, re, subprocess, sys
 from pathlib import Path
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -273,20 +273,30 @@ def main(argv=None):
         if a.render:
             # 需先有 musicxml 给 jianpu-ly
             mxl = out.with_suffix(".musicxml"); score.write("musicxml", fp=str(mxl))
-            _render(mxl, "jianpu")
+            _render(mxl, "jianpu", jianpu_text_path=out)
     return 0
 
 
-def _render(musicxml_path, fmt):
+def _render(musicxml_path, fmt, jianpu_text_path=None):
     eng_r = importlib.import_module("musicmaster.core.render")
     try:
         res = eng_r.render(str(musicxml_path), str(Path(musicxml_path).parent),
                            formats=(fmt,), jianpu_format="pdf")
         print("RENDER", {k: str(v) for k, v in res.items()})
     except Exception as e:
-        # 简谱图需 LilyPond;未装时优雅降级(与 autopilot/GUI 行为一致),不让 CLI 崩(修审计 M16)
-        print(f"[convert] 渲染跳过({type(e).__name__}: {e})。"
-              f"五线谱无需外部程序;简谱图需装 LilyPond 并设 LILYPOND_EXE——未装时已产出中间 .ly,可后续手动渲染。")
+        # 简谱图需 LilyPond;未装时降级为纯 SVG 简谱图,不让 CLI 崩(修审计 M16)
+        print(f"[convert] 专业渲染跳过({type(e).__name__}: {e})。")
+        if fmt == "jianpu" and jianpu_text_path and Path(jianpu_text_path).is_file():
+            renderer = Path(__file__).resolve().parents[2] / "scripts" / "render_jianpu_svg.py"
+            svg = Path(jianpu_text_path).with_name("jianpu.svg")
+            try:
+                subprocess.check_call([sys.executable, str(renderer), str(jianpu_text_path),
+                                       "-o", str(svg)])
+                print(f"RENDER_FALLBACK jianpu.svg: {svg}")
+                return
+            except Exception as exc:
+                print(f"[convert] SVG 降级也失败: {exc}")
+        print(f"五线谱无需外部程序;简谱图需装 LilyPond 并设 LILYPOND_EXE——未装时已产出中间 .ly,可后续手动渲染。")
 
 
 if __name__ == "__main__":
