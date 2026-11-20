@@ -5,6 +5,6 @@ if [ ! -x ".venv/bin/python" ]; then
   echo "[MusicMaster] .venv not found. Run: python scripts/setup_core.py"
   exit 1
 fi
-export PYTHONUTF8=1 MUSICMASTER_OPEN_BROWSER=1
+export PYTHONUTF8=1 MUSICMASTER_OPEN_BROWSER=1 MUSICMASTER_HOST=0.0.0.0 HF_ENDPOINT=https://hf-mirror.com
 echo "[MusicMaster] Starting... the browser will open shortly (Ctrl+C to stop)."
 exec .venv/bin/python -m musicmaster.web.server

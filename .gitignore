@@ -79,3 +79,6 @@ _demo_vocal/
 # ── README / promo media (committed deliverables, override the global *.mp4 ignore) ──
 !docs/assets/
 !docs/assets/promo.mp4
+
+# 用户本地示例目录(不入库)
+示例/

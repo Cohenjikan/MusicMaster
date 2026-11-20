@@ -5,6 +5,10 @@ rem so any non-ASCII char here would be mojibake and break command parsing.
 chcp 65001 >nul
 cd /d "%~dp0"
 set "MUSICMASTER_OPEN_BROWSER=1"
+rem Listen on all NICs so other devices on the LAN can open http://<this-ip>:7860
+set "MUSICMASTER_HOST=0.0.0.0"
+rem China mainland: use HF mirror for model weights
+set "HF_ENDPOINT=https://hf-mirror.com"
 set "PY=%~dp0.venv\Scripts\python.exe"
 if not exist "%PY%" (
   echo.

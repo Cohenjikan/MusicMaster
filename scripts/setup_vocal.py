@@ -25,9 +25,54 @@ ROOT = Path(__file__).resolve().parents[1]
 VENDOR = ROOT / "vendor"
 DP_DIR = VENDOR / "DiffPitcher"
 SVC_DIR = VENDOR / "seed-vc"
-DP_REPO = "https://github.com/haidog-yaqub/DiffPitcher"
-SVC_REPO = "https://github.com/Plachtaa/seed-vc"
+# 国内网络:git clone 走 GitHub 镜像(可用 MUSICMASTER_GH_MIRROR 覆盖);权重走 HF 镜像。
+GH_MIRROR = os.environ.get("MUSICMASTER_GH_MIRROR", "https://mirror.mikus.ink/https://github.com/")
+os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+DP_REPO = GH_MIRROR.rstrip("/") + "/haidog-yaqub/DiffPitcher"
+SVC_REPO = GH_MIRROR.rstrip("/") + "/Plachtaa/seed-vc"
 DP_SCRIPTS = ROOT / "musicmaster" / "vocal" / "diffpitcher_scripts"
+# 国内加速:Windows 上 PyPI 的 torch 轮子经 nvidia-* 依赖自带 CUDA 12.4 运行库。
+# 实测腾讯云 PyPI 镜像 ~4 MB/s,阿里云仅 ~30 KB/s(2026-11),故默认走腾讯云。
+TORCH_VERSION = os.environ.get("MUSICMASTER_TORCH_VERSION", "2.6.0")
+# Seed-VC 自带 requirements 锁 2.4.0 / 0.19.0 / 2.4.0,单独一套,别和 DiffPitcher 混。
+SVC_TORCH_VERSION = os.environ.get("MUSICMASTER_SVC_TORCH_VERSION", "2.4.0")
+SVC_TORCHVISION_VERSION = os.environ.get("MUSICMASTER_SVC_TORCHVISION_VERSION", "0.19.0")
+SVC_TORCHAUDIO_VERSION = os.environ.get("MUSICMASTER_SVC_TORCHAUDIO_VERSION", "2.4.0")
+PYPI_MIRROR = os.environ.get("MUSICMASTER_PYPI_MIRROR", "https://mirrors.cloud.tencent.com/pypi/simple/")
+
+
+def install_torch(run, cuda: str, torch_version: str | None = None,
+                  torchaudio_version: str | None = None, with_vision: bool = False) -> None:
+    """国内走 PyPI 镜像;其他平台回退 PyTorch 官方 CUDA 索引。"""
+    tv = torch_version or TORCH_VERSION
+    ta = torchaudio_version or tv
+    pkgs = [f"torch=={tv}"]
+    if with_vision:
+        pkgs.append(f"torchvision=={SVC_TORCHVISION_VERSION}")
+    pkgs.append(f"torchaudio=={ta}")
+    if os.name == "nt":
+        print(f"      [torch] 国内镜像: {PYPI_MIRROR} ({', '.join(pkgs)})")
+        run("install", *pkgs, "-i", PYPI_MIRROR, "--timeout", "60", "--retries", "5")
+    else:
+        run("install", *pkgs, "--index-url", f"https://download.pytorch.org/whl/{cuda}")
+
+
+def filtered_seedvc_requirements(req: Path) -> Path:
+    """剔除 seed-vc requirements 开头的 nightly --index-url 行(会直连 download.pytorch.org 卡死)。
+
+    保留其锁定的 torch==2.4.0 / torchvision==0.19.0 / torchaudio==2.4.0;
+    这些会由 install_torch 先从国内 PyPI 镜像装好,pip 看到已满足就不会重下。
+    """
+    out = VENDOR / "_seed-vc-requirements-filtered.txt"
+    lines = []
+    for raw in req.read_text(encoding="utf-8", errors="ignore").splitlines():
+        s = raw.strip()
+        if s.startswith(("torch ", "torchvision ", "torchaudio ")) and "--index-url" in s:
+            print(f"[filter] 跳过 nightly 行: {s}")
+            continue
+        lines.append(raw)
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return out
 
 
 def venv_python(d: Path) -> Path:
@@ -62,22 +107,28 @@ def main():
         # ── DiffPitcher venv ──
         neural = VENDOR / ".venv-neural"
         print(f"[venv] {neural}")
-        venv.create(neural, with_pip=True)
+        if not venv_python(neural).exists():
+            venv.create(neural, with_pip=True)
         npy = str(venv_python(neural))
         subprocess.check_call([npy, "-m", "pip", "install", "-U", "pip"])
-        subprocess.check_call([npy, "-m", "pip", "install", "torch", "torchaudio",
-                               "--index-url", f"https://download.pytorch.org/whl/{a.cuda}"])
-        subprocess.check_call([npy, "-m", "pip", "install", "-r", str(ROOT / "requirements-vocal.txt")])
+        install_torch(lambda *args: subprocess.check_call([npy, "-m", "pip", *args]), a.cuda)
+        subprocess.check_call([npy, "-m", "pip", "install", "-r", str(ROOT / "requirements" / "requirements-vocal.txt")])
 
         # ── Seed-VC venv(用其自带 requirements,版本锁定)──
         svc = VENDOR / ".venv-svc"
         print(f"[venv] {svc}")
-        venv.create(svc, with_pip=True)
+        if not venv_python(svc).exists():
+            venv.create(svc, with_pip=True)
         spy = str(venv_python(svc))
         subprocess.check_call([spy, "-m", "pip", "install", "-U", "pip"])
         req = SVC_DIR / "requirements.txt"
         if req.is_file():
-            subprocess.check_call([spy, "-m", "pip", "install", "-r", str(req)])
+            # 先从国内镜像装锁定版 torch 三件套,再用过滤掉 nightly 行的 requirements
+            install_torch(lambda *args: subprocess.check_call([spy, "-m", "pip", *args]), a.cuda,
+                          SVC_TORCH_VERSION, SVC_TORCHAUDIO_VERSION, with_vision=True)
+            req = filtered_seedvc_requirements(req)
+            subprocess.check_call([spy, "-m", "pip", "install", "-r", str(req),
+                                   "--timeout", "60", "--retries", "5"])
 
     print("\n-------- 权重 --------")
     print("- DiffPitcher:把 ckpts/ 放到 vendor/DiffPitcher/ckpts/:")

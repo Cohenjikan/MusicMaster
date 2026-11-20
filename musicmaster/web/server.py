@@ -162,20 +162,47 @@ def _free_port(host: str, preferred: int) -> int:
     return preferred
 
 
+def _lan_ips() -> list[str]:
+    """取本机非回环 IPv4 地址,便于打印局域网访问地址(只选路由,不发包)。"""
+    found: set[str] = set()
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("223.5.5.5", 80))
+            ip = s.getsockname()[0]
+            if not ip.startswith("127."):
+                found.add(ip)
+    except OSError:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if not ip.startswith("127."):
+                found.add(ip)
+    except OSError:
+        pass
+    return sorted(found)
+
+
 def main() -> None:
     import uvicorn
-    host = os.environ.get("MUSICMASTER_HOST", "127.0.0.1")
+    # 默认监听所有网卡,方便同一局域网内的手机/其他电脑访问;
+    # 仅本机使用可设 MUSICMASTER_HOST=127.0.0.1。
+    host = os.environ.get("MUSICMASTER_HOST", "0.0.0.0")
     try:
         preferred = int(os.environ.get("MUSICMASTER_PORT", "7860"))
     except ValueError:
         preferred = 7860
     port = _free_port(host, preferred)
-    url = f"http://{host}:{port}"
+    browse_host = "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
+    url = f"http://{browse_host}:{port}"
+    lan = _lan_ips()
+    lan_line = ("  局域网访问:" + ", ".join(f"http://{ip}:{port}" for ip in lan)) if lan else ""
     print(
         "\n========================================\n"
         "  MusicMaster 启动中(首次约 10-30 秒)...\n"
         f"  就绪后浏览器自动打开:{url}\n"
-        "  若没弹出,手动访问上面的地址。关闭本窗口即停止服务。\n"
+        + (lan_line + "\n" if lan_line else "")
+        + "  若没弹出,手动访问上面的地址。关闭本窗口即停止服务。\n"
         "========================================\n",
         flush=True,
     )

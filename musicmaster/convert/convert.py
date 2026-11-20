@@ -164,6 +164,10 @@ def score_to_jianpu(score, key_name=None) -> str:
     except Exception:
         noteflat = flat
     for e in noteflat.notesAndRests:
+        # 打击乐轨(Unpitched / PercussionChord)没有音高,不属于单声部简谱旋律,跳过。
+        # 否则 _note_to_token 里 max(p.midi for p in e.pitches) 会对空序列崩溃。
+        if not e.isRest and not getattr(e, "pitches", None):
+            continue
         off = float(e.offset)
         bar_idx = int(off / bar_ql + 1e-6)  # 先真除再补容差(原 // 后加 eps 无效)
         while bar_idx > cur_bar:
@@ -179,7 +183,10 @@ def _note_to_token(e, tonic_pc):
         head = "0" + suf
     else:
         # 兼容 Chord(无 .pitch):简谱是单声部,取最高音(旋律线);Note 则取其唯一音
-        midi = int(max(p.midi for p in e.pitches))
+        pitched = [p for p in e.pitches if getattr(p, "midi", None) is not None]
+        if not pitched:  # 无音高事件(打击乐等)按休止符处理
+            return "0" + suf + (" " + " ".join(["-"] * dashes) if dashes else "")
+        midi = int(max(p.midi for p in pitched))
         rel = (midi - tonic_pc) % 12
         deg = REL2DEG[rel]
         oct4 = tonic_pc + 60 + rel
