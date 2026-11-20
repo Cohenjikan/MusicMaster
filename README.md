@@ -104,7 +104,7 @@ python scripts/setup_core.py
 
 > 至此,CPU 两页(互译 / 记谱)即可运行。拆声 / 重塑是可选的 GPU 增量,见下面两节。
 
-**(可选)简谱出 PDF:** 本机安装 [LilyPond](https://lilypond.org)(GPL,仅作独立子进程调用),并设环境变量 `LILYPOND_EXE` 指向其可执行文件。未安装也可使用,只是简谱产出 `.ly` 源稿而非 PDF,五线谱(Verovio)不受影响。
+**(可选)简谱出 PDF:** 本机安装 [LilyPond](https://lilypond.org)(GPL,仅作独立子进程调用),并设环境变量 `LILYPOND_EXE` 指向其可执行文件。未安装也可使用,只是简谱产出 `.ly` 源稿而非 PDF,五线谱(Verovio)不受影响。另可用 `python scripts/render_jianpu_svg.py 简谱.txt` 直接产出**纯 SVG 简谱图**(零外部依赖,适合先看谱)。
 
 ---
 

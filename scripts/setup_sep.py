@@ -18,10 +18,10 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 ROOT = Path(__file__).resolve().parents[1]
-# 国内加速:Windows 上 PyPI 的 torch 轮子经 nvidia-* 依赖自带 CUDA 12.4 运行库,
-# 走阿里云 PyPI 镜像即可,避免 download.pytorch.org 的 2.5GB 单文件下载超时。
+# 国内加速:Windows 上 PyPI 的 torch 轮子经 nvidia-* 依赖自带 CUDA 12.4 运行库。
+# 实测腾讯云 PyPI 镜像 ~4 MB/s,阿里云仅 ~30 KB/s(2026-11),故默认走腾讯云。
 TORCH_VERSION = os.environ.get("MUSICMASTER_TORCH_VERSION", "2.6.0")
-PYPI_MIRROR = os.environ.get("MUSICMASTER_PYPI_MIRROR", "https://mirrors.aliyun.com/pypi/simple/")
+PYPI_MIRROR = os.environ.get("MUSICMASTER_PYPI_MIRROR", "https://mirrors.cloud.tencent.com/pypi/simple/")
 
 
 def install_torch(run, cuda: str) -> None:
