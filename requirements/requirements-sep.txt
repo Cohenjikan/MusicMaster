@@ -9,6 +9,7 @@
 # 固定版本,防止 audio-separator 的依赖解析把 torch 升级成 PyPI 的 CPU 新版
 torch==2.6.0
 torchaudio==2.6.0
+torchvision==0.21.0
 
 audio-separator[gpu]
 soundfile>=0.12
