@@ -65,6 +65,9 @@ def filtered_seedvc_requirements(req: Path) -> Path:
 
     保留其锁定的 torch==2.4.0 / torchvision==0.19.0 / torchaudio==2.4.0;
     这些会由 install_torch 先从腾讯云 PyTorch CUDA 镜像装好,pip 看到已满足就不会重下。
+
+    同时剔除 resemblyzer:它只在 seed-vc/eval.py 评估指标里用,且带的 webrtcvad
+    在 Windows 需要编译(缺 SDK 头 io.h 会失败);inference/app_vc 不依赖它。
     """
     out = VENDOR / "_seed-vc-requirements-filtered.txt"
     lines = []
@@ -72,6 +75,9 @@ def filtered_seedvc_requirements(req: Path) -> Path:
         s = raw.strip()
         if s.startswith(("torch ", "torchvision ", "torchaudio ")) and "--index-url" in s:
             print(f"[filter] 跳过 nightly 行: {s}")
+            continue
+        if s.startswith("resemblyzer"):
+            print(f"[filter] 跳过 resemblyzer(仅评估用,Windows 会编译 webrtcvad 失败): {s}")
             continue
         lines.append(raw)
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
