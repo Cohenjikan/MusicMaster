@@ -100,7 +100,7 @@ python scripts/setup_core.py
 ./start.sh
 ```
 
-启动后浏览器自动打开 **`http://127.0.0.1:7860`**(端口被占用则自动顺延);四个页签即四项能力 —— 此时 **互译 / 记谱(crepe)** 已可使用。
+启动后浏览器自动打开 **`http://127.0.0.1:7860`**(端口被占用则自动顺延);同一局域网的其他设备可用 **`http://<本机IP>:7860`** 访问(启动窗口会打印实际地址,例如 `http://10.85.10.221:7860`;需防火墙放行 TCP 7860)。只想本机访问可设 `MUSICMASTER_HOST=127.0.0.1`。四个页签即四项能力 —— 此时 **互译 / 记谱(crepe)** 已可使用。
 
 > 至此,CPU 两页(互译 / 记谱)即可运行。拆声 / 重塑是可选的 GPU 增量,见下面两节。
 
@@ -237,7 +237,7 @@ flowchart TB
   B -.->|"③ 下载 GET /api/file/{id}/{name}"| API
 ```
 
-> 长任务(拆声、重塑)采用「提交 → 取 job_id → 轮询进度 → 完成后取结果 / 下载」模型,因此页面不会卡住(`JobManager` 进程内线程池异步执行)。下载端点 `/api/file/{id}/{name}` 带目录穿越防护;默认 `127.0.0.1:7860`(`MUSICMASTER_HOST` 可改、占用则顺延 `_free_port`)。
+> 长任务(拆声、重塑)采用「提交 → 取 job_id → 轮询进度 → 完成后取结果 / 下载」模型,因此页面不会卡住(`JobManager` 进程内线程池异步执行)。下载端点 `/api/file/{id}/{name}` 带目录穿越防护;默认监听 `0.0.0.0:7860`(`MUSICMASTER_HOST` 可改回 `127.0.0.1`、占用则顺延 `_free_port`)。
 > 更细的「每一层用了哪些模型」流程图见 **[docs/架构流程图.md](docs/架构流程图.md)**。
 
 ---
@@ -246,7 +246,7 @@ flowchart TB
 
 界面经过专门设计,使用起来更有质感,区别于框架默认的通用样式。
 
-- **暖墨深色主题 + Fraunces 衬线字体**(自托管 woff2,`@font-face`;中文走系统衬线回退)。
+- **暖墨深色 / 浅色纸张双主题 + Fraunces 衬线字体**:默认跟随系统深浅色,右上角按钮可手动切换并记住选择(自托管 woff2,`@font-face`;中文走系统衬线回退)。
 - **旋转黑胶 `.vinyl`(沟纹 / 反光 / 唱片标)+ 唱臂 `.tonearm`** 随播放抬落 —— 它本身就是音频播放器。
 - **每页签独立配色** `--accent`:互译 `#4ade80` 绿 · 记谱 `#fbbf24` 琥珀 · 拆声 `#7aa2f7` 蓝 · 重塑 `#fb7299` 粉。
 
@@ -292,7 +292,7 @@ python -m musicmaster.vocal.pipeline --raw 清唱.wav --ref 去和声.wav --self
 
 ## 纯本地 · 命令行 · 许可清单
 
-- **音频不离开本机** —— `127.0.0.1` 本地服务,只有首次模型权重才联网下载;隐私友好。
+- **音频不上传云端** —— 默认监听所有网卡以便局域网访问(可设 `MUSICMASTER_HOST=127.0.0.1` 仅限本机);只有首次模型权重才联网下载。
 - **可脱离界面用 CLI 批处理** —— `musicmaster/cli.py` 提供 `gui / transcribe / convert / render / separate / vocal` 子命令。
 - **许可清单完整明确** —— `LICENSE` 为 Apache-2.0,`NOTICE` 逐条标注组件角色与许可(Karaoke RoFormer / Demucs MUSDB18 / ByteDance MAESTRO 标注非商用,Verovio LGPL 动态库、LilyPond / FFmpeg GPL 仅子进程)。
 

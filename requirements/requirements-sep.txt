@@ -3,8 +3,8 @@
 # 全部模型经 audio-separator 加载,权重首次运行自动下载(默认 C:\tmp\audio-separator-models,
 # 可用环境变量 MUSICMASTER_SEP_MODELS 覆盖)。
 #
-# torch/torchaudio 请按你的 CUDA 版本单独安装(本项目验证于 cu124):
-#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+# torch/torchaudio 由 setup_sep.py 安装(国内自动走阿里云 PyPI 镜像):
+#   pip install torch torchaudio -i https://mirrors.aliyun.com/pypi/simple/
 
 audio-separator[gpu]
 soundfile>=0.12
